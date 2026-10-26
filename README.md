@@ -20,11 +20,15 @@ Scammers copy a real home's photos from an old sale listing, post it "for rent" 
 | Anyone can list any address for rent. | Owners claim their home and switch on **Not for rent**. Rental listings of a locked home are held until the owner approves them, and the owner gets an alert. |
 | Renters must research ownership themselves. | The lister is checked against the county's owner of record automatically, and renters see only a masked name. |
 
-![Rentals with Home Lock labels](docs/screenshots/rentals.png)
+![Austin rentals with Home Lock labels on the cards and map pins](docs/screenshots/rentals.png)
 
-![A likely scam, with the evidence](docs/screenshots/after-scam.png)
+![A likely scam: score, and the lister vs. the county owner of record](docs/screenshots/after-scam.png)
+
+![Copied photos, with a drag-to-compare slider against the home's earlier sale listing](docs/screenshots/photo-evidence.png)
 
 ![The owner's alert when someone lists their locked home](docs/screenshots/owner-alert.png)
+
+<img src="docs/screenshots/mobile.png" width="300" alt="The listing detail on a phone">
 
 ## What it checks
 
@@ -51,17 +55,22 @@ Node 18 or newer. `npm test` runs the unit tests.
 
 **Demo walkthrough**
 
-1. **Rentals:** three Austin listings get labels. Open *2104 Maple Bend Dr* to see a likely scam. The lister isn't the owner, the owner lives there, the photos match the home's 2025 sale listing, the rent is 54% below HUD's rate, and the text is full of scam phrases. Tick *Show today's Zillow* to compare it with what renters see now.
-2. **Owners:** claim *905 Cedar Ridge Cv* as **Anjali Patel**. Try another name first; it's rejected because it doesn't match county records. Enter the code, then switch on **Not for rent**.
-3. **Post a rental:** list *905 Cedar Ridge Cv* as anyone else. The listing is held, and the owner sees an alert with *approve* or *block and report*.
-4. **Check any listing:** type a real Austin address (for example, one from a Craigslist ad). Owner, occupancy and sale data come live from Travis County.
+1. **Rent** (`#/rent`): a Zillow-style map and list of six Austin rentals. Each card and map pin carries a Home Lock label, and verified homes sort first. Open *2104 Maple Bend Dr* to see a likely scam. The lister isn't the owner, the owner lives there, the photos match the home's 2025 sale listing (drag the slider to compare), the rent is 54% below HUD's rate, and the scam phrases are highlighted. Switch on *Show today's Zillow* to see what renters get now.
+2. **For Owners** (`#/home-lock`): claim *905 Cedar Ridge Cv* as **Anjali Patel**. Try another name first; it's rejected because it doesn't match county records. Enter the mailed code, then switch on **Not for rent**.
+3. **Manage Rentals** (`#/rental-manager`): list *905 Cedar Ridge Cv* as anyone else. The listing is held, and the owner sees an alert with *approve* or *block and report*.
+4. **Check a listing** (`#/check`): type a real Austin address (for example, one from a Craigslist ad). Owner, occupancy and sale data come live from Travis County.
+
+*Reset demo* in the top bar clears the saved claims, locks and alerts.
 
 The demo homes, owners and photos are synthetic (`src/fixtures.js`, `tools/make_demo_photos.py`), so the demo never accuses a real person. Real addresses on the *Check any listing* page use live public county records, and the owner's name is shown masked.
 
 ## How it works
 
 ```
-index.html, styles.css    UI: rentals, listing detail, post a rental, owner dashboard, live check
+index.html, styles.css    Page shell, Zillow-style layout, motion and responsive rules
+src/app.js                Routes and views: rentals, listing detail, rental manager, owner dashboard, live check
+src/ui.js                 Icons, toasts, animated score ring and numbers, photo comparison slider
+src/map.js                Results map: Leaflet with price pins, plus a drawn Austin map used offline
 src/checks.js             All checks and the verdict (pure functions, unit tested)
 src/county.js             Travis County parcel lookup: direct, then via server.mjs proxy
 src/phash.js              Photo matching: normalized thumbnails + cross-correlation over crop windows
@@ -70,6 +79,7 @@ src/store.js              Demo persistence (localStorage) for claims, locks, ale
 server.mjs                Zero-dependency static server and county API proxy
 tools/make_demo_photos.py Generates the synthetic photos and their disguised copies
 tests/                    node:test unit tests
+vendor/leaflet/           Leaflet 1.9.4 (BSD-2-Clause), vendored so the app needs no CDN
 ```
 
 The app runs entirely in the browser. It works as a static site too (for example on GitHub Pages). There, the live county lookup works only if the county server allows cross-origin requests, and `npm start` always works.
@@ -78,15 +88,21 @@ The app runs entirely in the browser. It works as a static site too (for example
 
 Start with owner-occupied homes in the metros with the most rental-scam reports. Home Lock reuses Zillow's existing home claiming, photo archive and Rent Zestimate. County owner-of-record data is public in every U.S. county.
 
+## Design
+
+The UI recreates the layout of Zillow's rental search (map on the left, cards on the right, listing details in a modal) so judges can picture Home Lock inside the real product. It doesn't use Zillow's logo or assets.
+
+Motion follows [Emil Kowalski's design-engineering principles](https://emilkowal.ski/): custom ease-out curves, UI animations under 300ms, only `transform` and `opacity` animated, buttons that scale down slightly when pressed, popovers that grow from their trigger, Sonner-style toasts, staggered check results, and hover effects only on devices with a mouse. Everything respects `prefers-reduced-motion`.
+
 ## Built with
 
-HTML, CSS and JavaScript (ES modules), Node.js (built-ins only), Python with Pillow (to generate demo photos), Travis Central Appraisal District public ArcGIS REST API, HUD Small Area Fair Market Rents. Built with help from Claude (Anthropic) as an AI coding assistant.
+HTML, CSS and JavaScript (ES modules, no framework or build step), Node.js (built-ins only), Leaflet with OpenStreetMap and CARTO map tiles, Open Sans (Google Fonts), Python with Pillow (to generate demo photos), Travis Central Appraisal District public ArcGIS REST API, HUD Small Area Fair Market Rents. Built with help from Claude (Anthropic) as an AI coding assistant.
 
 ## Limits
 
 - Name matching can't tell when an owner uses a property manager. That's why the owner can approve a manager.
 - Owners who mail tax bills elsewhere still pass the occupancy check.
-- Photo matching was tuned on the synthetic demo photos. Copies of the same photo score 93 to 98%, while different homes mostly score below 90%. Two similar synthetic bedrooms reach about 95%, so the app only compares a listing with past photos of the same address.
+- Photo matching was tuned on the synthetic demo photos. Disguised copies score 93 to 96%. Different homes mostly score lower, but two similar synthetic rooms can reach about 94%, so the app only compares a listing with past photos of the same address.
 - The code-by-mail step is simulated in the demo.
 
 ## License

@@ -3,54 +3,101 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Home Lock for Zillow Rentals</title>
-  <meta name="description" content="A concept feature for Zillow Rentals that stops scammers from listing homes they don't own.">
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M16 3 3 14h4v14h18V14h4z' fill='%230041d9'/%3E%3Crect x='12' y='16' width='8' height='8' rx='1' fill='white'/%3E%3C/svg%3E">
+  <title>Austin TX Rentals · Home Lock for Zillow</title>
+  <meta name="description" content="Home Lock: a concept feature for Zillow Rentals that stops scammers from listing homes they don't own.">
+  <meta name="theme-color" content="#ffffff">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M16 3 3 13.5V29h26V13.5Z' fill='%23006AFF'/%3E%3Crect x='11' y='16' width='10' height='8' rx='1.6' fill='white'/%3E%3Cpath d='M13 16v-2.4a3 3 0 0 1 6 0V16' stroke='white' stroke-width='2' fill='none'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;500;600;700;800&display=swap">
+  <link rel="stylesheet" href="vendor/leaflet/leaflet.css">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <header class="top">
-    <a class="brand" href="#/browse">
-      <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M16 3 3 14h4v14h18V14h4z" fill="currentColor"/><rect x="12.5" y="15" width="7" height="6" rx="1" fill="#fff"/><path d="M14 15v-2a2 2 0 0 1 4 0v2" stroke="#fff" stroke-width="1.6" fill="none"/></svg>
-      <span>Home Lock</span><small>for Zillow Rentals · concept</small>
+  <a class="skip" href="#app">Skip to content</a>
+  <div class="concept-bar">Concept prototype for the Hack to the Future hackathon · not affiliated with or endorsed by Zillow · demo homes and owners are synthetic · <a href="#" id="resetDemo">Reset demo</a></div>
+  <header class="site-header">
+    <nav class="nav-left" aria-label="Primary">
+      <a href="#/rent" data-nav="rent">Rent</a>
+      <a href="#/check" data-nav="check">Check a listing</a>
+      <a href="#/how-it-works" data-nav="how-it-works">How it works</a>
+    </nav>
+    <a class="brand" href="#/rent" aria-label="Home Lock for Zillow, home">
+      <svg width="30" height="30" viewBox="0 0 32 32" aria-hidden="true"><path d="M16 3 3 13.5V29h26V13.5Z" fill="#006AFF"/><rect x="11" y="16" width="10" height="8" rx="1.6" fill="#fff"/><path d="M13 16v-2.4a3 3 0 0 1 6 0V16" stroke="#fff" stroke-width="2" fill="none"/></svg>
+      <span class="brand-word">Home Lock</span>
+      <span class="brand-tag">for Zillow</span>
     </a>
-    <nav>
-      <a href="#/browse" data-nav="browse">Rentals</a>
-      <a href="#/post" data-nav="post">Post a rental</a>
-      <a href="#/owner" data-nav="owner">Owners</a>
-      <a href="#/check" data-nav="check">Check any listing</a>
-      <a href="#/about" data-nav="about">How it works</a>
+    <nav class="nav-right" aria-label="Account">
+      <a href="#/rental-manager" data-nav="rental-manager"><span class="wide">Manage </span>Rentals</a>
+      <a href="#/home-lock" data-nav="home-lock"><span class="wide">For </span>Owners <span class="new-pill">New</span></a>
+      <a href="#/rent" class="sign-in">Sign in</a>
     </nav>
   </header>
 
-  <main id="app"></main>
-
-  <footer>
-    Concept prototype for the Hack to the Future hackathon. Not affiliated with or endorsed by Zillow.
-    Demo homes, owners and photos are synthetic; live lookups use public Travis County records.
-    <a href="#" id="resetDemo">Reset demo</a>
-  </footer>
+  <main id="app" tabindex="-1"></main>
 
   <template id="aboutTemplate">
-    <article class="about">
-      <h1>How Home Lock works</h1>
-      <p>Scammers copy a real home's photos, list it "for rent" far below market, and collect a deposit by wire or Zelle. The real owner often finds out from a neighbor. Today Zillow's defense is a generic warning on every listing and removing fakes after someone reports them.</p>
-      <h2>For owners: lock your home</h2>
-      <p>Zillow already lets owners claim their home. Home Lock adds one switch: <b>Not for rent</b>. Ownership is verified against the county's owner of record plus a code mailed to the property. After that, any rental listing for the address is held until the owner approves it (for example, their own property manager) and the owner gets an alert.</p>
-      <h2>For renters: evidence, not a generic warning</h2>
-      <ul>
-        <li><b>Lister vs. owner of record:</b> the lister's name is compared with the owner in Travis Central Appraisal District records. Renters only see a masked name.</li>
-        <li><b>Is the owner living there?</b> If the county sends the owner's tax mail to the house itself, it's probably their home, not a vacant rental.</li>
-        <li><b>Photos reused from another listing:</b> photos are matched against Zillow's archive of the home's earlier listings, even after cropping, recoloring or watermarks.</li>
-        <li><b>Recent sale:</b> homes that sold recently have fresh listing photos online, which is where scammers copy them from.</li>
-        <li><b>Price vs. area rent:</b> compared with HUD's FY2027 Small Area Fair Market Rent for the ZIP and bedroom count.</li>
-        <li><b>Scam language:</b> wire or Zelle payments, "out of the country", "keys will be mailed", moving to WhatsApp, deposits before a showing.</li>
-      </ul>
-      <h2>Why Zillow can ship this</h2>
-      <p>It builds on things Zillow already has: home claiming, its own photo archive and its Rent Zestimate (this prototype uses HUD rents instead). County owner records are public in every U.S. county. Rollout can start with owner-occupied homes in the metros with the most reports.</p>
-    </article>
+    <div class="page about">
+      <header class="about-hero">
+        <div class="eyebrow">How Home Lock works</div>
+        <h1>Stop rental scams before a renter ever sees them</h1>
+        <p>Scammers copy a real home's photos, list it far below market, and collect a deposit by Zelle or wire. Renters find an empty lockbox, and the owner finds out from a neighbor. Today Zillow shows the same generic warning on every listing and removes fakes after someone reports them.</p>
+      </header>
+
+      <section class="flow reveal" aria-label="How a listing flows through Home Lock">
+        <svg viewBox="0 0 960 300" role="img" aria-labelledby="flowTitle">
+          <title id="flowTitle">A new rental listing passes through four Home Lock checks and the owner's lock before renters see a verdict</title>
+          <defs>
+            <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 10 5 0 10Z" fill="#a7adb8"/></marker>
+          </defs>
+          <g font-family="Open Sans, system-ui" font-size="14" fill="#2a2a33">
+            <rect x="10" y="110" width="150" height="80" rx="14" fill="#fff" stroke="#d1d1d5"/>
+            <text x="85" y="145" text-anchor="middle" font-weight="700">New listing</text>
+            <text x="85" y="166" text-anchor="middle" fill="#596b82" font-size="12">address, name, rent,</text>
+            <text x="85" y="181" text-anchor="middle" fill="#596b82" font-size="12">photos, text</text>
+            <path d="M160 150h60" stroke="#a7adb8" stroke-width="2" marker-end="url(#arr)" class="flow-line-anim"/>
+            <rect x="225" y="20" width="250" height="260" rx="18" fill="#f2f7ff" stroke="#bcd3ff"/>
+            <text x="350" y="50" text-anchor="middle" font-weight="800" fill="#006aff">Home Lock checks</text>
+            <g font-size="13">
+              <rect x="245" y="66" width="210" height="40" rx="10" fill="#fff" stroke="#d6e3ff"/><text x="262" y="91">County owner of record</text>
+              <rect x="245" y="114" width="210" height="40" rx="10" fill="#fff" stroke="#d6e3ff"/><text x="262" y="139">Photos vs. earlier listings</text>
+              <rect x="245" y="162" width="210" height="40" rx="10" fill="#fff" stroke="#d6e3ff"/><text x="262" y="187">Rent vs. HUD area rent</text>
+              <rect x="245" y="210" width="210" height="40" rx="10" fill="#fff" stroke="#d6e3ff"/><text x="262" y="235">Scam phrases</text>
+            </g>
+            <path d="M475 150h60" stroke="#a7adb8" stroke-width="2" marker-end="url(#arr)" class="flow-line-anim"/>
+            <rect x="540" y="105" width="160" height="90" rx="16" fill="#1a1d24"/>
+            <text x="620" y="143" text-anchor="middle" font-weight="700" fill="#fff">Owner locked</text>
+            <text x="620" y="164" text-anchor="middle" fill="#c9cdd4" font-size="12">"Not for rent"?</text>
+            <path d="M700 125 C 740 125 750 70 790 70" stroke="#a7adb8" stroke-width="2" fill="none" marker-end="url(#arr)"/>
+            <path d="M700 175 C 740 175 750 230 790 230" stroke="#a7adb8" stroke-width="2" fill="none" marker-end="url(#arr)"/>
+            <rect x="795" y="35" width="155" height="70" rx="14" fill="#f1eafc" stroke="#d9c7f7"/>
+            <text x="872" y="66" text-anchor="middle" font-weight="700" fill="#5a2ca0">Held</text>
+            <text x="872" y="86" text-anchor="middle" font-size="12" fill="#5a2ca0">owner gets an alert</text>
+            <rect x="795" y="195" width="155" height="70" rx="14" fill="#e8f6ee" stroke="#bfe6cf"/>
+            <text x="872" y="226" text-anchor="middle" font-weight="700" fill="#0a7a46">Verdict</text>
+            <text x="872" y="246" text-anchor="middle" font-size="12" fill="#0a7a46">with evidence for renters</text>
+          </g>
+        </svg>
+      </section>
+
+      <section class="feature-grid">
+        <article class="feature reveal"><span class="f-ic" data-icon="building"></span><h3>Lister vs. owner of record</h3><p>The lister's name is matched against the owner in Travis Central Appraisal District records, handling formats like "LAST FIRST &amp; SPOUSE". Renters only see a masked name.</p></article>
+        <article class="feature reveal"><span class="f-ic" data-icon="mail"></span><h3>Is the owner living there?</h3><p>If the county sends the owner's tax mail to the house itself, it's probably their home, not a vacant rental, and "I'm out of the country" doesn't add up.</p></article>
+        <article class="feature reveal"><span class="f-ic" data-icon="camera"></span><h3>Photos reused from another listing</h3><p>Photos are matched against the home's earlier listings even after cropping, recoloring or a stamped caption, using normalized thumbnails and cross-correlation.</p></article>
+        <article class="feature reveal"><span class="f-ic" data-icon="tag"></span><h3>Price vs. area rent</h3><p>Rent is compared with HUD's FY2027 Small Area Fair Market Rent for the ZIP and bedroom count. Zillow would use its Rent Zestimate.</p></article>
+        <article class="feature reveal"><span class="f-ic" data-icon="chat"></span><h3>Scam language</h3><p>Wire, Zelle or gift cards; "out of the country"; "keys will be mailed"; moving to WhatsApp; a deposit before a showing.</p></article>
+        <article class="feature reveal"><span class="f-ic" data-icon="lock"></span><h3>Owner's Home Lock</h3><p>Owners verify against county records plus a code mailed to the property, then lock the home. Their own manager can be approved in one tap.</p></article>
+      </section>
+
+      <section class="ship reveal">
+        <h2>Why Zillow can ship it</h2>
+        <p>It builds on things Zillow already has: home claiming, an archive of past listing photos, and the Rent Zestimate. County owner records are public in every U.S. county. Rollout can start with owner-occupied homes in the metros with the most scam reports.</p>
+        <a class="btn btn-primary" href="#/home-lock">Try locking a home →</a>
+      </section>
+    </div>
   </template>
 
+  <script src="vendor/leaflet/leaflet.js"></script>
   <script type="module" src="src/app.js"></script>
 </body>
 </html>

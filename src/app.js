@@ -1,30 +1,30 @@
-import { runChecks, nameMatchScore, maskName, addressKey } from "./checks.js";
+import { runChecks, nameMatchScore, maskName, addressKey, scanText } from "./checks.js";
 import { lookupParcel } from "./county.js";
 import { DEMO_LISTINGS, DEMO_PARCELS, PHOTO_ARCHIVE } from "./fixtures.js";
+import { fmrFor } from "./fmr.js";
 import { indexArchive, loadImage, thumbnail, bestMatch, MATCH_THRESHOLD } from "./phash.js";
 import { store } from "./store.js";
+import { createMap } from "./map.js";
+import { esc, money, shortMoney, icon, STATUS_ICON, toast, countUp, ringSvg, fillRing, compareSlider } from "./ui.js";
 
 const $ = (sel, root = document) => root.querySelector(sel);
+const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 const app = $("#app");
 
-const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-const money = (n) => `$${Number(n).toLocaleString()}`;
 const lockFor = (address) => {
   const locks = store.locks();
   const key = Object.keys(locks).find((a) => addressKey(a) === addressKey(address));
   return key ? locks[key] : null;
 };
 
-const BADGE = {
-  ok: { text: "Owner verified", cls: "ok" },
-  caution: { text: "Caution", cls: "caution" },
-  danger: { text: "Likely scam", cls: "danger" },
-  blocked: { text: "Held by owner's Home Lock", cls: "blocked" },
-  pending: { text: "Checking…", cls: "pending" },
+const VERDICT = {
+  ok: { text: "Owner verified", cls: "ok", icon: () => icon.shield(14) },
+  caution: { text: "Caution", cls: "caution", icon: () => icon.alert(14) },
+  danger: { text: "Likely scam", cls: "danger", icon: () => icon.alert(14) },
+  blocked: { text: "Held by Home Lock", cls: "blocked", icon: () => icon.lock(14) },
 };
-const ICON = { pass: "✓", warn: "!", fail: "✕", info: "i" };
 
-// ---------- checks with photos ----------
+// ---------- evaluation ----------
 
 const archiveCache = new Map();
 async function photoMatches(listing) {
@@ -37,333 +37,750 @@ async function photoMatches(listing) {
   for (const src of listing.photos || []) {
     const img = await loadImage(src);
     const best = bestMatch(thumbnail(img), index);
-    if (best && best.score >= MATCH_THRESHOLD) matches.push({ src, match: best.src, score: best.score, from: archive.label });
+    if (best && best.score >= MATCH_THRESHOLD) {
+      matches.push({ src, match: best.src, score: best.score, from: archive.label, short: archive.short });
+    }
   }
   return matches;
 }
 
 const resultCache = new Map();
-async function evaluate(listing) {
-  const cacheKey = JSON.stringify([listing.id, listing.ownerApproved, !!lockFor(listing.address)]);
-  if (resultCache.has(cacheKey)) return resultCache.get(cacheKey);
-  const promise = (async () => {
-    let parcel = null;
-    let mode = "none";
-    let lookupError = null;
-    try {
-      ({ parcel, mode } = await lookupParcel(listing.address));
-    } catch (err) {
-      lookupError = err.message;
-    }
-    const matches = await photoMatches(listing).catch(() => []);
-    const result = runChecks({ listing, parcel, lock: lockFor(listing.address), photoMatches: matches, lookupFailed: !!lookupError });
-    return { ...result, parcel, mode, lookupError, matches };
-  })();
-  resultCache.set(cacheKey, promise);
-  return promise;
+function evaluate(listing) {
+  const key = JSON.stringify([listing.id, listing.ownerApproved, !!lockFor(listing.address)]);
+  if (!resultCache.has(key)) {
+    resultCache.set(key, (async () => {
+      let parcel = null;
+      let mode = "none";
+      let lookupError = null;
+      try {
+        ({ parcel, mode } = await lookupParcel(listing.address));
+      } catch (err) {
+        lookupError = err.message;
+      }
+      const matches = await photoMatches(listing).catch(() => []);
+      const result = runChecks({ listing, parcel, lock: lockFor(listing.address), photoMatches: matches, lookupFailed: !!lookupError });
+      return { ...result, parcel, mode, lookupError, matches, score: trustScore(result) };
+    })());
+  }
+  return resultCache.get(key);
+}
+
+function trustScore({ checks, verdict }) {
+  if (verdict.level === "blocked") return 0;
+  let s = 100;
+  for (const c of checks) s -= c.status === "fail" ? 24 : c.status === "warn" ? 10 : 0;
+  return Math.max(4, Math.min(98, s));
 }
 
 function allListings() {
   const posted = store.listings();
   const ids = new Set(posted.map((l) => l.id));
-  // Listings the owner blocked are taken down.
   return [...posted, ...DEMO_LISTINGS.filter((l) => !ids.has(l.id))].filter((l) => !l.removed);
 }
 
 // ---------- router ----------
 
-const routes = { browse, listing: listingDetail, post, owner, check, about };
-function go(hash) {
-  location.hash = hash;
-}
+const routes = {
+  "": search, rent: search, homedetails: search, listing: search,
+  "rental-manager": post, "home-lock": owner, check, "how-it-works": about,
+};
+let current = null;
+
 async function render() {
   const [route, arg] = location.hash.replace(/^#\/?/, "").split("/");
-  const view = routes[route] || browse;
-  document.querySelectorAll("[data-nav]").forEach((a) => a.classList.toggle("active", a.dataset.nav === (routes[route] ? route : "browse")));
+  const view = routes[route] ?? search;
+  const navKey = view === search ? "rent" : route;
+  $$("[data-nav]").forEach((a) => a.classList.toggle("active", a.dataset.nav === navKey));
+  if (view === search) {
+    if (current !== "search") { current = "search"; await search(); }
+    const id = (route === "homedetails" || route === "listing") && arg ? decodeURIComponent(arg) : null;
+    if (id) openDetail(id);
+    else closeDetail();
+    return;
+  }
+  closeDetail(true);
+  current = route;
   window.scrollTo(0, 0);
+  app.classList.remove("page-in");
+  void app.offsetWidth;
+  app.classList.add("page-in");
   await view(arg ? decodeURIComponent(arg) : undefined);
 }
 window.addEventListener("hashchange", render);
 
-// ---------- browse ----------
+// ---------- search results (map + list) ----------
 
-async function browse() {
-  const listings = allListings();
-  const alerts = store.alerts().filter((a) => a.status === "held");
+const filters = { maxRent: null, minBeds: 0, verifiedOnly: false };
+let mapApi = null;
+
+async function search() {
+  document.body.dataset.view = "search";
   app.innerHTML = `
-    <section class="hero">
-      <div>
-        <h1>Austin, TX rentals</h1>
-        <p>Every listing is checked against county property records, the home's past listing photos, area rents and known scam patterns.</p>
+    <div class="search-bar">
+      <label class="search-input">
+        <input value="Austin, TX" aria-label="Search location">
+        ${icon.search(18)}
+      </label>
+      <div class="filter-row">
+        <button class="filter-btn selected" data-pop="type">For Rent ${icon.chevron(16)}</button>
+        <button class="filter-btn" data-pop="price"><span data-label="price">Price</span> ${icon.chevron(16)}</button>
+        <button class="filter-btn" data-pop="beds"><span data-label="beds">Beds &amp; Baths</span> ${icon.chevron(16)}</button>
+        <button class="filter-btn" data-pop="home">Home Type ${icon.chevron(16)}</button>
+        <button class="filter-btn lock-filter ${filters.verifiedOnly ? "selected" : ""}" data-toggle="verified">${icon.shield(16)} Owner verified only</button>
+        <button class="btn btn-primary save-search" type="button">Save search</button>
       </div>
-      <label class="toggle"><input type="checkbox" id="before"> Show today's Zillow (no Home Lock)</label>
-    </section>
-    ${alerts.length ? `<div class="notice">${alerts.length} listing${alerts.length > 1 ? "s are" : " is"} held because the owner turned on Home Lock. <a href="#/owner">Owner view</a></div>` : ""}
-    <div class="grid" id="grid">
-      ${listings.map((l) => cardHtml(l)).join("")}
-    </div>`;
+      <div class="popover" id="popover" role="dialog" hidden></div>
+    </div>
+    <div class="results">
+      <div class="map-pane"><div id="map"></div></div>
+      <section class="list-pane">
+        <header class="list-head">
+          <h1>Austin TX Rental Listings</h1>
+          <div class="list-sub">
+            <span id="count"></span>
+            <span class="sort">Sort: <b>Home Lock verified first</b> ${icon.chevron(14)}</span>
+          </div>
+          <div class="today-toggle">
+            <label class="switch small"><input type="checkbox" id="before"><span></span></label>
+            <label for="before">Show today's Zillow (without Home Lock)</label>
+          </div>
+        </header>
+        <ul class="cards" id="cards"></ul>
+        <div class="list-foot">
+          <p>Home Lock checks every rental against county property records, the home's earlier listing photos, HUD area rents and known scam patterns.</p>
+          <a href="#/how-it-works">How Home Lock works →</a>
+        </div>
+      </section>
+    </div>
+    <button class="map-toggle btn btn-dark" id="mapToggle">${icon.map(16)} Map</button>
+    <div id="detailRoot"></div>`;
+
+  mapApi = createMap($("#map"), { onSelect: (id) => (location.hash = `#/homedetails/${encodeURIComponent(id)}`) });
+  setTimeout(() => mapApi.invalidate && mapApi.invalidate(), 50);
+
   const before = $("#before");
   before.checked = sessionStorage.getItem("hl.before") === "1";
+  document.body.classList.toggle("before-mode", before.checked);
   before.addEventListener("change", () => {
     sessionStorage.setItem("hl.before", before.checked ? "1" : "0");
-    browse();
-  });
-  for (const l of listings) {
-    evaluate(l).then((r) => {
-      const el = $(`[data-badge="${CSS.escape(l.id)}"]`);
-      if (!el || before.checked) return;
-      const b = BADGE[r.verdict.level];
-      el.className = `badge ${b.cls}`;
-      el.textContent = b.text;
+    document.body.classList.toggle("before-mode", before.checked);
+    toast(before.checked ? "Showing today's Zillow" : "Home Lock is on", {
+      description: before.checked ? "Every listing gets the same generic scam warning." : "Each listing shows its evidence-backed verdict.",
+      tone: before.checked ? "default" : "success",
     });
+  });
+
+  $("[data-toggle=verified]").addEventListener("click", (e) => {
+    filters.verifiedOnly = !filters.verifiedOnly;
+    e.currentTarget.classList.toggle("selected", filters.verifiedOnly);
+    drawCards();
+  });
+  $(".save-search").addEventListener("click", () => toast("Search saved", { description: "We'll email you new owner-verified rentals in Austin.", tone: "success" }));
+  $("#mapToggle").addEventListener("click", () => {
+    document.body.classList.toggle("show-map");
+    $("#mapToggle").innerHTML = document.body.classList.contains("show-map") ? `${icon.list(16)} List` : `${icon.map(16)} Map`;
+    setTimeout(() => mapApi.invalidate && mapApi.invalidate(), 60);
+  });
+  setupPopovers();
+  await drawCards(true);
+}
+
+function popoverHtml(kind) {
+  if (kind === "price") {
+    const opts = [null, 1500, 2000, 2500, 3000];
+    return `<h3>Max monthly rent</h3><div class="seg">${opts.map((o) => `<button data-set="maxRent" data-val="${o ?? ""}" class="${filters.maxRent === o ? "on" : ""}">${o ? money(o) : "Any"}</button>`).join("")}</div>`;
+  }
+  if (kind === "beds") {
+    return `<h3>Bedrooms</h3><div class="seg">${[0, 1, 2, 3, 4].map((b) => `<button data-set="minBeds" data-val="${b}" class="${filters.minBeds === b ? "on" : ""}">${b ? `${b}+` : "Any"}</button>`).join("")}</div>`;
+  }
+  if (kind === "home") return `<h3>Home type</h3><label class="check"><input type="checkbox" checked disabled> Houses</label><p class="muted small">Demo listings are all houses.</p>`;
+  return `<h3>Listing type</h3><label class="check"><input type="radio" checked disabled> For rent</label>`;
+}
+
+function setupPopovers() {
+  const pop = $("#popover");
+  let openFor = null;
+  const close = () => {
+    if (!openFor) return;
+    openFor.classList.remove("open");
+    pop.dataset.state = "closed";
+    openFor = null;
+    setTimeout(() => { if (!openFor) pop.hidden = true; }, 160);
+  };
+  $$("[data-pop]").forEach((btn) => btn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (openFor === btn) return close();
+    if (openFor) openFor.classList.remove("open");
+    openFor = btn;
+    btn.classList.add("open");
+    pop.innerHTML = popoverHtml(btn.dataset.pop);
+    const r = btn.getBoundingClientRect();
+    const host = $(".search-bar").getBoundingClientRect();
+    pop.style.left = `${Math.min(r.left - host.left, host.width - 300)}px`;
+    pop.style.top = `${r.bottom - host.top + 8}px`;
+    pop.style.transformOrigin = "top left";
+    pop.hidden = false;
+    pop.dataset.state = "closed";
+    requestAnimationFrame(() => (pop.dataset.state = "open"));
+  }));
+  pop.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const b = e.target.closest("[data-set]");
+    if (!b) return;
+    const v = b.dataset.val;
+    filters[b.dataset.set] = b.dataset.set === "maxRent" ? (v ? Number(v) : null) : Number(v);
+    $("[data-label=price]").textContent = filters.maxRent ? `Up to ${money(filters.maxRent)}` : "Price";
+    $("[data-label=beds]").textContent = filters.minBeds ? `${filters.minBeds}+ bds` : "Beds & Baths";
+    $$("[data-pop=price],[data-pop=beds]").forEach((x) => x.classList.toggle("selected", x.dataset.pop === "price" ? !!filters.maxRent : !!filters.minBeds));
+    close();
+    drawCards();
+  });
+  document.addEventListener("click", close);
+  document.addEventListener("keydown", (e) => e.key === "Escape" && close());
+}
+
+async function drawCards(first = false) {
+  const all = allListings();
+  const results = await Promise.all(all.map((l) => evaluate(l).then((r) => [l, r])));
+  const rank = { ok: 0, caution: 1, danger: 2, blocked: 3 };
+  let rows = results
+    .filter(([l]) => (!filters.maxRent || l.rent <= filters.maxRent) && l.beds >= filters.minBeds)
+    .sort((a, b) => rank[a[1].verdict.level] - rank[b[1].verdict.level] || b[1].score - a[1].score);
+  if (filters.verifiedOnly) rows = rows.filter(([, r]) => r.verdict.level === "ok");
+  $("#count").textContent = `${rows.length} rental${rows.length === 1 ? "" : "s"} available`;
+  $("#cards").innerHTML = rows.length
+    ? rows.map(([l, r], i) => cardHtml(l, r, first ? i : -1)).join("")
+    : `<li class="empty">${icon.search(28)}<p>No rentals match these filters.</p></li>`;
+  mapApi.setListings(rows.map(([l, r]) => ({
+    id: l.id, lat: l.lat ?? 30.27, lng: l.lng ?? -97.74, price: shortMoney(l.rent), level: r.verdict.level,
+    lock: r.verdict.level === "blocked", label: `${money(l.rent)} at ${l.address}`,
+  })));
+  $$(".card").forEach((card) => {
+    const id = card.dataset.id;
+    card.addEventListener("mouseenter", () => mapApi.highlight(id));
+    card.addEventListener("mouseleave", () => mapApi.unhighlight(id));
+    setupCarousel(card);
+    card.querySelector(".heart").addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const on = e.currentTarget.classList.toggle("on");
+      toast(on ? "Saved to your homes" : "Removed from saved homes", { tone: on ? "success" : "default", duration: 2500 });
+    });
+  });
+}
+
+function cardHtml(l, r, stagger) {
+  const v = VERDICT[r.verdict.level];
+  return `
+    <li class="card ${stagger >= 0 ? "stagger" : ""}" style="${stagger >= 0 ? `--i:${stagger}` : ""}" data-id="${esc(l.id)}">
+      <a href="#/homedetails/${encodeURIComponent(l.id)}" class="card-link" aria-label="${esc(l.address)}">
+        <div class="card-photo">
+          <div class="slides" data-n="${l.photos.length}">
+            ${l.photos.map((p, i) => `<img src="${esc(p)}" alt="" loading="${i ? "lazy" : "eager"}" draggable="false">`).join("")}
+          </div>
+          <span class="card-badge ${v.cls}">${v.icon()} ${v.text}</span>
+          <span class="card-badge generic">${icon.alert(13)} Beware of rental scams</span>
+          <button class="heart" aria-label="Save">${icon.heart(22)}</button>
+          <button class="nav prev" aria-label="Previous photo">${icon.left(18)}</button>
+          <button class="nav next" aria-label="Next photo">${icon.right(18)}</button>
+          <div class="dots">${l.photos.map((_, i) => `<i class="${i ? "" : "on"}"></i>`).join("")}</div>
+        </div>
+        <div class="card-body">
+          <div class="card-price">${money(l.rent)}<span>/mo</span></div>
+          <div class="card-facts"><b>${l.beds}</b> bds <span class="sep"></span> <b>${l.baths}</b> ba <span class="sep"></span> <b>${Number(l.sqft).toLocaleString()}</b> sqft <span class="dash">-</span> ${esc(l.homeType || "House")} for rent</div>
+          <address>${esc(l.address)}</address>
+          <div class="card-meta">${esc(l.listerName)}${l.postedDaysAgo === 0 ? " · New today" : ` · ${l.postedDaysAgo} day${l.postedDaysAgo > 1 ? "s" : ""} on Zillow`}</div>
+        </div>
+      </a>
+    </li>`;
+}
+
+function setupCarousel(root) {
+  const slides = root.querySelector(".slides");
+  if (!slides) return;
+  const n = Number(slides.dataset.n);
+  let i = 0;
+  const go = (d) => {
+    i = (i + d + n) % n;
+    slides.style.transform = `translateX(${-i * 100}%)`;
+    root.querySelectorAll(".dots i").forEach((dot, k) => dot.classList.toggle("on", k === i));
+  };
+  root.querySelector(".prev")?.addEventListener("click", (e) => { e.preventDefault(); e.stopPropagation(); go(-1); });
+  root.querySelector(".next")?.addEventListener("click", (e) => { e.preventDefault(); e.stopPropagation(); go(1); });
+}
+
+// ---------- home details (modal over the results, like Zillow) ----------
+
+let openId = null;
+
+function closeDetail(immediate = false) {
+  const root = $("#detailRoot");
+  if (!root || !openId) return;
+  openId = null;
+  document.body.classList.remove("modal-open");
+  const modal = root.querySelector(".modal-wrap");
+  if (!modal) return;
+  if (immediate) { root.innerHTML = ""; return; }
+  modal.dataset.state = "closing";
+  setTimeout(() => { if (!openId) root.innerHTML = ""; }, 200);
+}
+
+async function openDetail(id) {
+  const l = allListings().find((x) => x.id === id);
+  const root = $("#detailRoot");
+  if (!l || !root) { location.hash = "#/rent"; return; }
+  if (openId === id) return;
+  openId = id;
+  document.body.classList.add("modal-open");
+  const beforeMode = sessionStorage.getItem("hl.before") === "1";
+  const extra = Math.max(0, l.photos.length - 5);
+  root.innerHTML = `
+    <div class="modal-wrap" data-state="opening">
+      <div class="backdrop" data-close></div>
+      <article class="modal" role="dialog" aria-modal="true" aria-label="${esc(l.address)}">
+        <header class="modal-bar">
+          <button class="icon-btn" data-close aria-label="Back to search">${icon.back(20)} <span>Back to search</span></button>
+          <div class="modal-brand">${brandMark(22)} <b>Home Lock</b></div>
+          <div class="modal-actions">
+            <button class="icon-btn" data-act="save">${icon.heart(18)} <span>Save</span></button>
+            <button class="icon-btn" data-act="share">${icon.share(18)} <span>Share</span></button>
+            <button class="icon-btn" data-act="hide">${icon.hide(18)} <span>Hide</span></button>
+          </div>
+        </header>
+        <div class="photo-grid">
+          ${l.photos.slice(0, 5).map((p, i) => `<img src="${esc(p)}" alt="Photo ${i + 1} of ${esc(l.address)}" class="pg-${i}">`).join("")}
+          <button class="see-all btn btn-light">${icon.camera(16)} See all ${l.photos.length} photos${extra ? ` (+${extra})` : ""}</button>
+        </div>
+        <div class="detail-cols">
+          <div class="detail-main">
+            <div class="price-row">
+              <div class="d-price">${money(l.rent)}<span>/mo</span></div>
+              <div class="stats">
+                <div><b>${l.beds}</b><span>beds</span></div>
+                <div><b>${l.baths}</b><span>baths</span></div>
+                <div><b>${Number(l.sqft).toLocaleString()}</b><span>sqft</span></div>
+              </div>
+            </div>
+            <h1 class="d-address">${esc(l.address)}</h1>
+            <div class="chips">
+              <span class="chip">${icon.home(16)} ${esc(l.homeType || "House")}</span>
+              ${l.facts ? Object.entries(l.facts).slice(0, 4).map(([k, v]) => `<span class="chip">${k === "Year built" ? icon.calendar(16) : k === "Pets" ? icon.heart(16) : k === "Parking" ? icon.tag(16) : icon.check(16)} ${esc(k === "Available" ? `Available ${v}` : k === "Year built" ? `Built in ${v}` : v)}</span>`).join("") : ""}
+            </div>
+            <section id="lockSection" class="lock-section">
+              ${beforeMode ? beforeBlock() : skeletonBlock()}
+            </section>
+            <section>
+              <h2>What's special</h2>
+              <p class="desc" id="desc">${esc(l.description)}</p>
+              ${(l.messages || []).length ? `<h3 class="sub">Messages from the lister</h3>${l.messages.map((m) => `<div class="bubble msg">${esc(m)}</div>`).join("")}` : ""}
+            </section>
+            ${l.facts ? `<section><h2>Facts &amp; features</h2><dl class="facts">${Object.entries(l.facts).map(([k, v]) => `<div><dt>${esc(k)}</dt><dd>${esc(v)}</dd></div>`).join("")}</dl></section>` : ""}
+          </div>
+          <aside class="detail-side">
+            <div class="contact-card" id="contactCard">
+              <div class="contact-head">${icon.user(18)} <div><b>${esc(l.listerName)}</b><div class="muted small">Listed ${l.postedDaysAgo === 0 ? "today" : `${l.postedDaysAgo} day${l.postedDaysAgo === 1 ? "" : "s"} ago`}</div></div></div>
+              <button class="btn btn-primary block" data-act="tour">Request a tour</button>
+              <button class="btn btn-outline block" data-act="contact">Contact lister</button>
+              <div class="contact-note">${beforeMode ? `<div class="generic-warning">${icon.alert(16)} <span><b>Beware of rental scams.</b> Never wire money or pay before seeing a home.</span></div>` : `<div class="mini-verdict pending"><span class="spinner"></span> Running Home Lock checks…</div>`}</div>
+            </div>
+          </aside>
+        </div>
+      </article>
+    </div>`;
+  requestAnimationFrame(() => root.querySelector(".modal-wrap").dataset.state = "open");
+  root.querySelectorAll("[data-close]").forEach((el) => el.addEventListener("click", () => (location.hash = "#/rent")));
+  root.querySelector(".modal").addEventListener("click", onModalAction(l));
+  document.addEventListener("keydown", escClose);
+  if (beforeMode) return;
+
+  const r = await evaluate(l);
+  if (openId !== id) return;
+  $("#lockSection").innerHTML = lockBlock(r, l);
+  $("#contactCard .contact-note").innerHTML = miniVerdict(r);
+  if (r.verdict.level === "danger" || r.verdict.level === "blocked") {
+    $$("#contactCard [data-act=tour], #contactCard [data-act=contact]").forEach((b) => b.classList.add("muted-btn"));
+  }
+  highlightPhrases($("#desc"), l.description);
+  $$(".msg").forEach((m, i) => highlightPhrases(m, l.messages[i]));
+  const ringHost = $("#lockSection .score");
+  if (ringHost) {
+    fillRing(ringHost, r.score / 100);
+    countUp(ringHost.querySelector(".score-num"), r.score);
+  }
+  $$("#lockSection .cmp").forEach(compareSlider);
+}
+
+function escClose(e) {
+  if (e.key === "Escape" && openId) {
+    document.removeEventListener("keydown", escClose);
+    location.hash = "#/rent";
   }
 }
 
-function cardHtml(l) {
-  const beforeMode = sessionStorage.getItem("hl.before") === "1";
-  return `
-    <a class="card" href="#/listing/${encodeURIComponent(l.id)}">
-      <div class="thumb" style="background-image:url('${esc(l.photos[0])}')">
-        ${beforeMode ? "" : `<span class="badge pending" data-badge="${esc(l.id)}">${BADGE.pending.text}</span>`}
-      </div>
-      <div class="card-body">
-        <div class="price">${money(l.rent)}<span>/mo</span></div>
-        <div class="facts"><b>${l.beds}</b> bd · <b>${l.baths}</b> ba · <b>${Number(l.sqft).toLocaleString()}</b> sqft</div>
-        <div class="addr">${esc(l.address)}</div>
-        <div class="muted">Listed by ${esc(l.listerName)}${l.postedDaysAgo === 0 ? " · New today" : ` · ${l.postedDaysAgo}d ago`}</div>
-      </div>
-    </a>`;
+function onModalAction(l) {
+  return (e) => {
+    const b = e.target.closest("[data-act]");
+    if (!b) return;
+    const act = b.dataset.act;
+    if (act === "save") { b.classList.toggle("on"); toast(b.classList.contains("on") ? "Saved to your homes" : "Removed from saved homes", { duration: 2500 }); }
+    if (act === "share") { navigator.clipboard?.writeText(location.href).catch(() => {}); toast("Link copied", { duration: 2500 }); }
+    if (act === "hide") toast("We'll hide this home from your search", { duration: 2500 });
+    if (act === "tour" || act === "contact") {
+      if (b.classList.contains("muted-btn")) toast("Home Lock paused contact", { description: "This listing failed its checks. Don't send money or personal details.", tone: "danger" });
+      else toast(act === "tour" ? "Tour requested" : "Message sent", { description: `${l.listerName} will reply through Zillow.`, tone: "success" });
+    }
+    if (act === "report") toast("Thanks, we've reported this listing", { description: "Our trust and safety team will review it within an hour.", tone: "success" });
+  };
 }
 
-// ---------- listing detail ----------
-
-async function listingDetail(id) {
-  const l = allListings().find((x) => x.id === id);
-  if (!l) return go("#/browse");
-  const beforeMode = sessionStorage.getItem("hl.before") === "1";
-  app.innerHTML = `
-    <a class="back" href="#/browse">← All rentals</a>
-    <div class="detail">
-      <div>
-        <div class="gallery">
-          ${l.photos.map((p, i) => `<img src="${esc(p)}" alt="Listing photo ${i + 1}" class="${i === 0 ? "hero-img" : ""}">`).join("")}
-        </div>
-        <div class="price big">${money(l.rent)}<span>/mo</span></div>
-        <div class="facts"><b>${l.beds}</b> bd · <b>${l.baths}</b> ba · <b>${Number(l.sqft).toLocaleString()}</b> sqft</div>
-        <h2 class="addr">${esc(l.address)}</h2>
-        <h3>What the lister says</h3>
-        <p>${esc(l.description)}</p>
-        ${(l.messages || []).length ? `<h3>Messages from the lister</h3>${l.messages.map((m) => `<p class="bubble">${esc(m)}</p>`).join("")}` : ""}
-        <p class="muted">Listed by ${esc(l.listerName)}</p>
-      </div>
-      <aside id="panel">
-        ${beforeMode ? beforePanel() : `<div class="panel"><div class="spinner"></div><p>Checking county records, photos and price…</p></div>`}
-      </aside>
-    </div>`;
-  if (beforeMode) return;
-  const r = await evaluate(l);
-  if (location.hash !== `#/listing/${encodeURIComponent(id)}`) return;
-  $("#panel").innerHTML = panelHtml(r, l);
+function brandMark(size = 28) {
+  return `<svg width="${size}" height="${size}" viewBox="0 0 32 32" aria-hidden="true"><path d="M16 3 3 13.5V29h26V13.5Z" fill="#006AFF"/><rect x="11" y="16" width="10" height="8" rx="1.6" fill="#fff"/><path d="M13 16v-2.4a3 3 0 0 1 6 0V16" stroke="#fff" stroke-width="2" fill="none"/></svg>`;
 }
 
-function beforePanel() {
-  return `
-    <div class="panel before">
-      <h3>Contact this lister</h3>
-      <button class="btn" disabled>Request a tour</button>
-      <div class="generic-warning"><b>Beware of rental scams.</b> Never wire money or pay before seeing a home.</div>
-      <p class="muted">This is all a renter sees today: a generic warning on every listing.</p>
-    </div>`;
+function beforeBlock() {
+  return `<div class="today-box">${icon.alert(18)}<div><b>Beware of rental scams.</b> Never wire money or pay before seeing a home. <span class="muted">This same warning appears on every listing today.</span></div></div>`;
 }
 
-function panelHtml(r, l) {
-  const v = r.verdict;
-  const b = BADGE[v.level];
+function skeletonBlock() {
+  return `<div class="lock-card skeleton"><div class="sk sk-ring"></div><div class="sk-lines"><div class="sk"></div><div class="sk"></div><div class="sk short"></div></div></div>`;
+}
+
+function miniVerdict(r) {
+  const v = VERDICT[r.verdict.level];
+  return `<div class="mini-verdict ${v.cls}">${v.icon()} <div><b>${esc(r.verdict.title)}</b><div>${esc(r.verdict.advice)}</div></div></div>
+    ${r.verdict.level === "danger" || r.verdict.level === "blocked" ? `<button class="btn btn-danger-ghost block" data-act="report">Report this listing</button>` : ""}`;
+}
+
+function lockBlock(r, l) {
+  const v = VERDICT[r.verdict.level];
   const modeNote = {
     live: "Owner data pulled live from Travis County records.",
-    proxy: "Owner data pulled live from Travis County records (via this app's proxy).",
+    proxy: "Owner data pulled live from Travis County records.",
     demo: "Demo home: synthetic owner record in the county's format.",
-    none: r.lookupError ? `County lookup failed: ${esc(r.lookupError)}` : "",
+    none: r.lookupError ? `County lookup failed: ${r.lookupError}` : "",
   }[r.mode];
-  const pair = (m) => `
-        <figure><img src="${esc(m.src)}" alt="Photo in this listing"><figcaption>This listing</figcaption></figure>
-        <span class="eq">≈ ${Math.round(m.score * 100)}%</span>
-        <figure><img src="${esc(m.match)}" alt="Photo from the earlier listing"><figcaption>${esc(m.from)}</figcaption></figure>`;
-  const photoEvidence = r.matches.length
-    ? `<div class="evidence">${pair(r.matches[0])}</div>${r.matches.length > 1
-      ? `<details><summary class="small">Show all ${r.matches.length} matching photos</summary><div class="evidence">${r.matches.slice(1).map(pair).join("")}</div></details>`
-      : ""}`
-    : "";
   return `
-    <div class="panel">
-      <div class="verdict ${b.cls}">
-        <div class="verdict-title">${esc(v.title)}</div>
-        <div>${esc(v.advice)}</div>
+    <div class="lock-card ${v.cls}">
+      <div class="lock-top">
+        <div class="score ${v.cls}">
+          ${ringSvg(104, 9)}
+          <div class="score-inner"><span class="score-num">0</span><span class="score-of">/100</span></div>
+        </div>
+        <div class="lock-headline">
+          <div class="eyebrow">${icon.shield(14)} Home Lock check</div>
+          <h2>${esc(r.verdict.title)}</h2>
+          <p>${esc(r.verdict.advice)}</p>
+        </div>
       </div>
-      <h3>Home Lock check</h3>
       <ul class="checks">
-        ${r.checks.map((c) => `
-          <li class="${c.status}">
-            <span class="dot">${ICON[c.status]}</span>
-            <div><b>${esc(c.label)}</b><div>${esc(c.detail)}</div>
-            ${c.source ? `<a class="src" href="${esc(c.source.url)}" target="_blank" rel="noopener">${esc(c.source.name)}</a>` : ""}</div>
+        ${r.checks.map((c, i) => `
+          <li class="check ${c.status}" style="--i:${i}">
+            <span class="status">${STATUS_ICON[c.status]}</span>
+            <div class="check-body">
+              <div class="check-title">${esc(c.label)}</div>
+              <div class="check-detail">${esc(c.detail)}</div>
+              ${evidenceFor(c, r, l)}
+              ${c.source ? `<a class="src" href="${esc(c.source.url)}" target="_blank" rel="noopener">${esc(c.source.name)} ↗</a>` : ""}
+            </div>
           </li>`).join("")}
       </ul>
-      ${photoEvidence}
-      <p class="muted small">${modeNote}</p>
-      ${v.level === "danger" || v.level === "blocked" ? `<button class="btn danger-btn" id="report">Report this listing</button>` : `<button class="btn">Request a tour</button>`}
-      <p class="muted small">Are you the owner of this home? <a href="#/owner">Turn on Home Lock</a>.</p>
+      <p class="mode-note">${esc(modeNote)}</p>
     </div>`;
 }
 
-// ---------- post a rental (lister side) ----------
+function evidenceFor(c, r, l) {
+  if (c.id === "owner" && r.parcel && c.status !== "info") {
+    const ok = c.status === "pass";
+    return `<div class="id-compare">
+      <div class="id-card">${icon.user(16)}<div><span>Listed by</span><b>${esc(l.listerName)}</b></div></div>
+      <div class="id-vs ${ok ? "ok" : "bad"}">${ok ? icon.check(16) : "≠"}</div>
+      <div class="id-card">${icon.building(16)}<div><span>Owner of record</span><b>${esc(maskName(r.parcel.ownerName))}</b></div></div>
+    </div>`;
+  }
+  if (c.id === "occupancy" && (c.status === "fail" || c.status === "warn")) {
+    return `<div class="mail-flow"><span>${icon.mail(16)} County tax mail</span><i class="flow-line"></i><span>${icon.home(16)} This house</span></div>`;
+  }
+  if (c.id === "photos" && r.matches.length) {
+    const m = r.matches[0];
+    return `<div class="cmp" tabindex="0" role="slider" aria-label="Compare this listing's photo with the earlier listing" aria-valuemin="0" aria-valuemax="100">
+        <img src="${esc(m.match)}" alt="" class="cmp-bottom" draggable="false">
+        <img src="${esc(m.src)}" alt="" class="cmp-top" draggable="false">
+        <span class="cmp-label left">This listing</span>
+        <span class="cmp-label right">${esc(m.short || m.from)}</span>
+        <span class="cmp-handle"><span>${icon.left(14)}${icon.right(14)}</span></span>
+      </div>
+      <div class="match-strip">${r.matches.map((x) => `<figure><img src="${esc(x.src)}" alt=""><figcaption>${Math.round(x.score * 100)}% match</figcaption></figure>`).join("")}</div>`;
+  }
+  if (c.id === "price") {
+    const fmr = fmrFor(l.zip, l.beds);
+    if (!fmr) return "";
+    const max = Math.max(fmr.rent, l.rent) * 1.25;
+    const pos = (n) => Math.min(100, (n / max) * 100).toFixed(1);
+    return `<div class="price-gauge" style="--you:${pos(l.rent)}%;--fmr:${pos(fmr.rent)}%">
+      <div class="gauge-track"><span class="gauge-fill ${c.status}"></span><span class="gauge-mark"></span></div>
+      <div class="gauge-labels"><span class="you">This listing ${money(l.rent)}</span><span class="fmr">Area rent ${money(fmr.rent)}</span></div>
+    </div>`;
+  }
+  return "";
+}
+
+function highlightPhrases(el, text) {
+  if (!el || !text) return;
+  const hits = scanText(text);
+  let html = esc(text);
+  for (const h of hits) {
+    const re = new RegExp(esc(h.phrase).replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
+    html = html.replace(re, (m) => `<mark title="${esc(h.why)}">${m}</mark>`);
+  }
+  el.innerHTML = html;
+}
+
+// ---------- Rental Manager: post a rental ----------
 
 async function post() {
-  const addresses = DEMO_PARCELS.map((p) => p.address);
+  document.body.dataset.view = "page";
   app.innerHTML = `
-    <h1>Post a rental</h1>
-    <p class="muted">This is the lister's side. Try posting a home you don't own and see what Home Lock does.</p>
-    <form class="form" id="postForm">
-      <label>Address
-        <input name="address" list="addrs" required placeholder="2104 Maple Bend Dr, Austin TX 78704">
-        <datalist id="addrs">${addresses.map((a) => `<option value="${esc(a)}">`).join("")}</datalist>
-      </label>
-      <div class="row">
-        <label>Your name<input name="listerName" required placeholder="Michael Brown"></label>
-        <label>Monthly rent<input name="rent" type="number" min="100" required value="1200"></label>
-      </div>
-      <div class="row">
-        <label>Bedrooms<input name="beds" type="number" min="0" max="8" required value="3"></label>
-        <label>Bathrooms<input name="baths" type="number" min="1" max="8" step="0.5" required value="2"></label>
-        <label>Square feet<input name="sqft" type="number" min="200" required value="1600"></label>
-      </div>
-      <label>Description<textarea name="description" rows="4" required>Lovely home, available now. I'm out of the country so I can't show it, but send the deposit to hold it and I'll mail the keys.</textarea></label>
-      <fieldset>
-        <legend>Photos</legend>
-        <label class="radio"><input type="radio" name="photoSet" value="maple" checked> Use the photos from this home's old sale listing (what scammers do)</label>
-        <label class="radio"><input type="radio" name="photoSet" value="oak"> Use my own new photos</label>
-        <label class="radio"><input type="radio" name="photoSet" value="upload"> Upload photos <input type="file" name="files" accept="image/*" multiple></label>
-      </fieldset>
-      <button class="btn primary" type="submit">Publish listing</button>
-    </form>
-    <div id="postResult"></div>`;
-  $("#postForm").addEventListener("submit", async (e) => {
-    e.preventDefault();
-    const f = new FormData(e.target);
-    const address = f.get("address").trim();
-    const parcelZip = (address.match(/\b(\d{5})\b(?!.*\d{5})/) || [])[1] || "";
-    let photos;
-    const set = f.get("photoSet");
-    if (set === "upload") {
-      const files = [...e.target.files.files].slice(0, 6);
-      if (!files.length) return alert("Pick at least one photo to upload.");
-      photos = await Promise.all(files.map(fileToDataUrl));
-    } else {
-      const home = set === "maple" ? photoHomeFor(address) : "oak";
-      photos = [1, 2, 3, 4].map((i) => `demo/photos/${home}-${set === "maple" ? "copied" : "original"}-${i}.jpg`);
-    }
-    const listing = {
-      id: `posted-${Date.now()}`,
-      address,
-      zip: parcelZip,
-      listerName: f.get("listerName").trim(),
-      rent: Number(f.get("rent")),
-      beds: Number(f.get("beds")),
-      baths: Number(f.get("baths")),
-      sqft: Number(f.get("sqft")),
-      description: f.get("description").trim(),
-      messages: [],
-      photos,
-      postedDaysAgo: 0,
-      ownerApproved: false,
-    };
-    $("#postResult").innerHTML = `<div class="panel"><div class="spinner"></div><p>Running Home Lock checks…</p></div>`;
-    const r = await evaluate(listing);
-    store.saveListing(listing);
-    if (r.verdict.level === "blocked") {
-      store.addAlert({
-        id: `alert-${Date.now()}`, listingId: listing.id, address: listing.address,
-        listerName: listing.listerName, rent: listing.rent, at: Date.now(), status: "held",
-      });
-      $("#postResult").innerHTML = `
-        <div class="verdict blocked"><div class="verdict-title">Your listing is on hold</div>
-        <div>The owner of this home has turned on Home Lock, so they need to approve it before it goes live. We've notified them.</div></div>
-        <p><a href="#/owner">See what the owner sees →</a></p>`;
-    } else {
-      $("#postResult").innerHTML = `
-        <div class="verdict ${BADGE[r.verdict.level].cls}"><div class="verdict-title">Published with the label "${BADGE[r.verdict.level].text}"</div>
-        <div>Renters will see the Home Lock check next to your listing.</div></div>
-        <p><a href="#/listing/${encodeURIComponent(listing.id)}">View your listing as a renter →</a></p>`;
-    }
+    <div class="page rm">
+      <aside class="rm-steps">
+        <div class="rm-title">${icon.building(18)} Rental Manager</div>
+        <ol>
+          <li class="done"><span>1</span> Property</li>
+          <li class="done"><span>2</span> Details</li>
+          <li class="done"><span>3</span> Photos</li>
+          <li class="active"><span>4</span> Review &amp; publish</li>
+        </ol>
+        <p class="muted small">This is the lister's side. Try listing a home you don't own and see what Home Lock does.</p>
+      </aside>
+      <form class="rm-form card-surface" id="postForm">
+        <h1>List a rental</h1>
+        <fieldset>
+          <legend>Property</legend>
+          <label class="field">Address
+            <input name="address" list="addrs" required placeholder="905 Cedar Ridge Cv, Austin TX 78702" autocomplete="off">
+            <datalist id="addrs">${DEMO_PARCELS.map((p) => `<option value="${esc(p.address)}">`).join("")}</datalist>
+          </label>
+          <div class="grid-3">
+            <label class="field">Bedrooms<input name="beds" type="number" min="0" max="8" required value="3"></label>
+            <label class="field">Bathrooms<input name="baths" type="number" min="1" max="8" step="0.5" required value="2"></label>
+            <label class="field">Square feet<input name="sqft" type="number" min="200" required value="1640"></label>
+          </div>
+        </fieldset>
+        <fieldset>
+          <legend>Listing</legend>
+          <div class="grid-2">
+            <label class="field">Your name<input name="listerName" required placeholder="Michael Brown"></label>
+            <label class="field">Monthly rent<span class="prefix-input"><i>$</i><input name="rent" type="number" min="100" required value="1200"></span></label>
+          </div>
+          <label class="field">Description<textarea name="description" rows="4" required>Lovely home, available now. I'm out of the country so I can't show it, but send the deposit to hold it and I'll mail the keys.</textarea></label>
+        </fieldset>
+        <fieldset>
+          <legend>Photos</legend>
+          <div class="photo-choices">
+            <label class="photo-choice"><input type="radio" name="photoSet" value="copied" checked>
+              <span class="pc-img" style="background-image:url('demo/photos/cedar-copied-1.jpg')"></span>
+              <span><b>Photos from the home's old sale listing</b><small>What scammers do</small></span></label>
+            <label class="photo-choice"><input type="radio" name="photoSet" value="own">
+              <span class="pc-img" style="background-image:url('demo/photos/oak-original-1.jpg')"></span>
+              <span><b>My own new photos</b><small>Taken this week</small></span></label>
+            <label class="photo-choice"><input type="radio" name="photoSet" value="upload">
+              <span class="pc-img upload">${icon.upload(22)}</span>
+              <span><b>Upload photos</b><small data-upload-note>JPG or PNG, up to 6</small></span>
+              <input class="sr-only" type="file" name="files" accept="image/*" multiple tabindex="-1"></label>
+          </div>
+        </fieldset>
+        <div class="form-foot">
+          <span class="muted small">${icon.shield(14)} Every new listing runs through Home Lock before renters see it.</span>
+          <button class="btn btn-primary" type="submit">Publish listing</button>
+        </div>
+      </form>
+      <div id="postResult" class="rm-result"></div>
+    </div>`;
+  const form = $("#postForm");
+  form.addEventListener("submit", onPost);
+  // The upload card is one target: picking it opens the file dialog.
+  form.querySelector('input[value="upload"]').addEventListener("click", () => form.files.click());
+  form.files.addEventListener("change", () => {
+    const n = form.files.files.length;
+    form.querySelector("[data-upload-note]").textContent = n ? `${n} photo${n === 1 ? "" : "s"} selected` : "JPG or PNG, up to 6";
   });
 }
 
-function photoHomeFor(address) {
-  if (/cedar/i.test(address)) return "cedar";
-  return "maple";
+async function onPost(e) {
+  e.preventDefault();
+  const form = e.target;
+  const f = new FormData(form);
+  const address = f.get("address").trim();
+  const zip = (address.match(/\b(\d{5})\b(?!.*\d{5})/) || [])[1] || "";
+  const set = f.get("photoSet");
+  let photos;
+  if (set === "upload") {
+    const files = [...form.files.files].slice(0, 6);
+    if (!files.length) { toast("Pick at least one photo to upload", { tone: "danger" }); return; }
+    photos = await Promise.all(files.map(fileToDataUrl));
+  } else if (set === "copied") {
+    const home = /cedar/i.test(address) ? "cedar" : "maple";
+    photos = [1, 2, 3, 4].map((i) => `demo/photos/${home}-copied-${i}.jpg`);
+  } else {
+    photos = [1, 2, 3, 4].map((i) => `demo/photos/oak-original-${i}.jpg`);
+  }
+  const demo = DEMO_LISTINGS.find((d) => addressKey(d.address) === addressKey(address));
+  const listing = {
+    id: `posted-${Date.now()}`, address, zip, lat: demo?.lat, lng: demo?.lng,
+    listerName: f.get("listerName").trim(), rent: Number(f.get("rent")), beds: Number(f.get("beds")),
+    baths: Number(f.get("baths")), sqft: Number(f.get("sqft")), homeType: "House",
+    description: f.get("description").trim(), messages: [], photos, postedDaysAgo: 0, ownerApproved: false,
+  };
+
+  const steps = [
+    ["Matching the address to county property records", icon.building(16)],
+    ["Comparing your name with the owner of record", icon.user(16)],
+    ["Checking photos against earlier listings of this home", icon.camera(16)],
+    ["Comparing rent with HUD area rents", icon.tag(16)],
+    ["Checking the owner's Home Lock", icon.lock(16)],
+  ];
+  const out = $("#postResult");
+  out.innerHTML = `<div class="card-surface run"><h2>Running Home Lock</h2><ul class="run-steps">${steps.map(([t, ic], i) => `<li style="--i:${i}"><span class="run-ic">${ic}</span>${t}<span class="run-state"><span class="spinner"></span></span></li>`).join("")}</ul></div>`;
+  out.scrollIntoView({ behavior: "smooth", block: "start" });
+  const [r] = await Promise.all([evaluate(listing), wait(350)]);
+  for (const li of $$(".run-steps li", out)) {
+    await wait(260);
+    li.classList.add("done");
+    li.querySelector(".run-state").innerHTML = icon.check(16);
+  }
+  await wait(250);
+  store.saveListing(listing);
+  const v = VERDICT[r.verdict.level];
+  if (r.verdict.level === "blocked") {
+    store.addAlert({ id: `alert-${Date.now()}`, listingId: listing.id, address: listing.address, listerName: listing.listerName, rent: listing.rent, at: Date.now(), status: "held" });
+    out.innerHTML = `<div class="card-surface result blocked">
+        <div class="result-art">${lockArt(true)}</div>
+        <div><div class="eyebrow">${icon.lock(14)} Held by Home Lock</div>
+        <h2>Your listing is on hold</h2>
+        <p>The owner of this home has locked it as <b>not for rent</b>. They need to approve your listing before any renter can see it, and we've notified them.</p>
+        <a class="btn btn-outline" href="#/home-lock">See what the owner sees →</a></div></div>`;
+    toast("Listing held for owner approval", { description: listing.address, tone: "lock" });
+  } else {
+    out.innerHTML = `<div class="card-surface result ${v.cls}">
+        <div class="result-badge ${v.cls}">${v.icon()} ${v.text}</div>
+        <h2>Published with Home Lock score ${r.score}/100</h2>
+        <p>${esc(r.verdict.advice)}</p>
+        <a class="btn btn-primary" href="#/homedetails/${encodeURIComponent(listing.id)}">View as a renter →</a></div>`;
+    toast("Listing published", { description: `Labeled "${v.text}"`, tone: r.verdict.level === "ok" ? "success" : "danger" });
+  }
 }
+
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function fileToDataUrl(file) {
   const img = await loadImage(URL.createObjectURL(file));
-  const scale = Math.min(1, 800 / Math.max(img.naturalWidth, img.naturalHeight));
+  const scale = Math.min(1, 900 / Math.max(img.naturalWidth, img.naturalHeight));
   const c = document.createElement("canvas");
   c.width = Math.round(img.naturalWidth * scale);
   c.height = Math.round(img.naturalHeight * scale);
   c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
-  return c.toDataURL("image/jpeg", 0.8);
+  return c.toDataURL("image/jpeg", 0.82);
 }
 
-// ---------- owner: claim + lock ----------
+// ---------- Home Lock for owners ----------
+
+function lockArt(locked) {
+  return `<svg class="lock-art ${locked ? "locked" : ""}" viewBox="0 0 220 170" aria-hidden="true">
+    <defs><linearGradient id="la-roof" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#2f6fff"/><stop offset="1" stop-color="#0041d9"/></linearGradient></defs>
+    <ellipse cx="110" cy="158" rx="88" ry="8" fill="#000" opacity=".07"/>
+    <path d="M30 78 110 18l80 60v76H30Z" fill="#eef4ff"/>
+    <path d="M18 84 110 14l92 70" fill="none" stroke="url(#la-roof)" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+    <rect x="52" y="96" width="30" height="28" rx="3" fill="#cfe0ff"/><rect x="138" y="96" width="30" height="28" rx="3" fill="#cfe0ff"/>
+    <g class="lock-g">
+      <path class="shackle" d="M95 98V86a15 15 0 0 1 30 0v12" fill="none" stroke="#1a1d24" stroke-width="7" stroke-linecap="round"/>
+      <rect x="86" y="96" width="48" height="40" rx="8" fill="#1a1d24"/>
+      <circle cx="110" cy="113" r="5" fill="#fff"/><rect x="108" y="114" width="4" height="10" rx="2" fill="#fff"/>
+    </g>
+  </svg>`;
+}
 
 async function owner() {
+  document.body.dataset.view = "page";
   const claims = store.claims();
-  const claimed = Object.keys(claims);
+  const homes = Object.keys(claims);
+  const anyLocked = homes.some((a) => lockFor(a));
   app.innerHTML = `
-    <h1>Home Lock for owners</h1>
-    <p class="muted">Claim your home once, then lock it as <b>not for rent</b>. Any rental listing of a locked home is held until you approve it.</p>
-    <div class="owner-grid">
-      <section class="panel">
-        <h3>Claim a home</h3>
-        <form id="claimForm" class="form">
-          <label>Home address<input name="address" list="addrs" required placeholder="905 Cedar Ridge Cv, Austin TX 78702">
-            <datalist id="addrs">${DEMO_PARCELS.map((p) => `<option value="${esc(p.address)}">`).join("")}</datalist></label>
-          <label>Your full name<input name="name" required placeholder="Anjali Patel"></label>
-          <button class="btn primary" type="submit">Find my home in county records</button>
-        </form>
-        <div id="claimStep"></div>
+    <div class="page owner">
+      <section class="owner-hero">
+        <div>
+          <div class="eyebrow">${icon.shield(14)} New for homeowners</div>
+          <h1>Lock your home against rental scams</h1>
+          <p>Scammers copy photos of homes they don't own and "rent" them to strangers. Claim your home once, switch on <b>Not for rent</b>, and any rental listing of your address is held until you approve it.</p>
+          <ul class="hero-points">
+            <li>${icon.building(16)} Verified against county owner records</li>
+            <li>${icon.bell(16)} Instant alert if someone tries to list it</li>
+            <li>${icon.check(16)} Approve your own property manager in one tap</li>
+          </ul>
+        </div>
+        <div class="hero-art">${lockArt(anyLocked)}</div>
       </section>
-      <section>
-        ${claimed.length ? claimed.map((a) => ownerHomeHtml(a, claims[a])).join("") : `<div class="panel muted">No claimed homes yet.</div>`}
-      </section>
+      <div class="owner-grid">
+        <section class="card-surface claim">
+          <h2>Claim a home</h2>
+          <div class="stepper"><span class="on">1 Find home</span><span>2 Verify owner</span><span>3 Mailed code</span></div>
+          <form id="claimForm" class="claim-form">
+            <label class="field">Home address<input name="address" list="addrs" required placeholder="905 Cedar Ridge Cv, Austin TX 78702" autocomplete="off">
+              <datalist id="addrs">${DEMO_PARCELS.map((p) => `<option value="${esc(p.address)}">`).join("")}</datalist></label>
+            <label class="field">Your full legal name<input name="name" required placeholder="Anjali Patel" autocomplete="name"></label>
+            <button class="btn btn-primary block" type="submit">Find my home in county records</button>
+          </form>
+          <div id="claimStep" class="claim-step"></div>
+        </section>
+        <section class="homes">
+          ${homes.length ? homes.map((a) => ownerHomeHtml(a, claims[a])).join("") : `<div class="card-surface empty-home">${icon.home(28)}<p>Homes you claim show up here.</p></div>`}
+        </section>
+      </div>
     </div>`;
   $("#claimForm").addEventListener("submit", onClaim);
-  app.querySelectorAll("[data-lock]").forEach((el) => el.addEventListener("change", () => {
+  $$("[data-lock]").forEach((el) => el.addEventListener("change", () => {
     store.setLock(el.dataset.lock, el.checked ? { since: Date.now() } : null);
     resultCache.clear();
-    owner();
+    const art = $(".hero-art .lock-art");
+    art?.classList.toggle("locked", Object.keys(store.claims()).some((a) => lockFor(a)));
+    const card = el.closest(".home-card");
+    card.classList.toggle("is-locked", el.checked);
+    card.querySelector(".lock-state").textContent = el.checked
+      ? "Locked. Rental listings for this address are held until you approve them."
+      : "Unlocked. Anyone can list this address for rent.";
+    toast(el.checked ? "Home Lock is on" : "Home Lock is off", {
+      description: el.checked ? "We'll hold any rental listing of this home for you." : "Rental listings of this home won't be held.",
+      tone: el.checked ? "lock" : "default",
+    });
   }));
-  app.querySelectorAll("[data-approve]").forEach((el) => el.addEventListener("click", () => decide(el.dataset.approve, true)));
-  app.querySelectorAll("[data-deny]").forEach((el) => el.addEventListener("click", () => decide(el.dataset.deny, false)));
+  $$("[data-approve]").forEach((el) => el.addEventListener("click", () => decide(el.dataset.approve, true)));
+  $$("[data-deny]").forEach((el) => el.addEventListener("click", () => decide(el.dataset.deny, false)));
 }
 
 function ownerHomeHtml(address, claim) {
   const lock = lockFor(address);
   const alerts = store.alerts().filter((a) => addressKey(a.address) === addressKey(address));
+  const demo = DEMO_LISTINGS.find((d) => addressKey(d.address) === addressKey(address));
+  const photo = demo ? demo.photos[0].replace("copied", "original") : "";
   return `
-    <div class="panel home">
-      <div class="home-head">
-        <div><b>${esc(address)}</b><div class="muted small">Verified owner: ${esc(claim.name)} · matches ${esc(claim.masked)} in county records</div></div>
-        <label class="switch"><input type="checkbox" data-lock="${esc(address)}" ${lock ? "checked" : ""}><span></span> Not for rent</label>
+    <article class="card-surface home-card ${lock ? "is-locked" : ""}">
+      <div class="home-top">
+        ${photo ? `<div class="home-thumb" style="background-image:url('${esc(photo)}')"></div>` : `<div class="home-thumb blank">${icon.home(24)}</div>`}
+        <div class="home-info">
+          <b>${esc(address)}</b>
+          <div class="muted small">${icon.check(13)} Verified owner: ${esc(claim.name)} (county record ${esc(claim.masked)})</div>
+        </div>
+        <label class="switch big" title="Not for rent"><input type="checkbox" data-lock="${esc(address)}" ${lock ? "checked" : ""}><span></span></label>
       </div>
-      <p class="small">${lock ? "Locked. Rental listings for this address are held until you approve them." : "Unlocked. Anyone can list this address for rent."}</p>
-      <h4>Alerts</h4>
+      <div class="lock-row"><b>Not for rent</b><span class="lock-state">${lock ? "Locked. Rental listings for this address are held until you approve them." : "Unlocked. Anyone can list this address for rent."}</span></div>
+      <h3 class="sub">${icon.bell(16)} Activity</h3>
       ${alerts.length ? `<ul class="alerts">${alerts.map((a) => `
-        <li class="${a.status}">
-          <div><b>${esc(a.listerName)}</b> tried to list your home for ${money(a.rent)}/mo
-          <div class="muted small">${new Date(a.at).toLocaleString()} · ${a.status === "held" ? "Held, waiting for you" : a.status === "approved" ? "You approved it" : "You blocked it and reported the lister"}</div></div>
-          ${a.status === "held" ? `<div class="actions"><button class="btn small" data-approve="${esc(a.id)}">It's my manager, approve</button><button class="btn small danger-btn" data-deny="${esc(a.id)}">Not me, block and report</button></div>` : ""}
-        </li>`).join("")}</ul>` : `<p class="muted small">No one has tried to list this home.</p>`}
-    </div>`;
+        <li class="alert ${a.status}">
+          <span class="alert-ic">${a.status === "held" ? icon.lock(16) : a.status === "approved" ? icon.check(16) : icon.x(16)}</span>
+          <div class="alert-body"><b>${esc(a.listerName)}</b> tried to list your home for ${money(a.rent)}/mo
+            <div class="muted small">${new Date(a.at).toLocaleString()} · ${a.status === "held" ? "Held, waiting for you" : a.status === "approved" ? "You approved it" : "You blocked it and reported the lister"}</div>
+            ${a.status === "held" ? `<div class="alert-actions"><button class="btn btn-outline sm" data-approve="${esc(a.id)}">It's my manager, approve</button><button class="btn btn-danger sm" data-deny="${esc(a.id)}">Not me, block and report</button></div>` : ""}
+          </div>
+        </li>`).join("")}</ul>` : `<p class="muted small quiet">No one has tried to list this home. We'll alert you the moment someone does.</p>`}
+    </article>`;
 }
 
 async function onClaim(e) {
@@ -372,38 +789,59 @@ async function onClaim(e) {
   const address = f.get("address").trim();
   const name = f.get("name").trim();
   const step = $("#claimStep");
-  step.innerHTML = `<div class="spinner"></div>`;
+  const stepper = $$(".stepper span");
+  step.innerHTML = `<div class="claim-loading"><span class="spinner"></span> Searching Travis County records…</div>`;
   let parcel;
   let mode;
   try {
     ({ parcel, mode } = await lookupParcel(address));
   } catch (err) {
-    step.innerHTML = `<p class="fail-text">${esc(err.message)}</p>`;
+    step.innerHTML = `<div class="claim-msg bad">${icon.alert(16)} ${esc(err.message)}</div>`;
     return;
   }
   if (!parcel) {
-    step.innerHTML = `<p class="fail-text">We couldn't find that address in Travis County records. Check the house number and street.</p>`;
+    step.innerHTML = `<div class="claim-msg bad">${icon.alert(16)} We couldn't find that address in Travis County records. Check the house number and street.</div>`;
     return;
   }
   const masked = maskName(parcel.ownerName);
+  stepper[1].classList.add("on");
   if (nameMatchScore(name, parcel.ownerName) < 0.99) {
-    step.innerHTML = `<p class="fail-text">County records list the owner as ${esc(masked)}, which doesn't match "${esc(name)}". Only the owner of record can lock a home.</p>`;
+    step.innerHTML = `<div class="claim-msg bad shake">${icon.x(16)} <div>County records list the owner as <b>${esc(masked)}</b>, which doesn't match "${esc(name)}". Only the owner of record can lock a home.</div></div>`;
     return;
   }
-  // A real rollout would mail this code to the property address, the same way
-  // Zillow already verifies home claims. The demo shows it on screen.
+  stepper[2].classList.add("on");
+  // A real rollout mails this code to the property address, the way Zillow
+  // already verifies home claims. The demo shows it on screen.
   const code = String(1000 + Math.floor(Math.random() * 9000));
   step.innerHTML = `
-    <p class="ok-text">Match: ${esc(masked)} owns this home in county records${mode === "demo" ? " (demo record)" : ""}.</p>
-    <p class="small">We've mailed a 4-digit code to the property address. <span class="muted">(Demo: the code is <b>${code}</b>.)</span></p>
-    <form id="codeForm" class="form inline"><input name="code" inputmode="numeric" maxlength="4" placeholder="Code" required><button class="btn primary">Verify</button></form>`;
+    <div class="claim-msg good">${icon.check(16)} <div><b>${esc(masked)}</b> owns this home in county records${mode === "demo" ? " (demo record)" : ""}.</div></div>
+    <p class="small">We mailed a 4-digit code to the property address. <span class="muted">Demo code: <b class="code">${code}</b></span></p>
+    <form id="codeForm" class="code-form">
+      ${[0, 1, 2, 3].map((i) => `<input class="otp" inputmode="numeric" maxlength="1" aria-label="Digit ${i + 1}" required>`).join("")}
+      <button class="btn btn-primary">Verify</button>
+    </form>`;
+  const otps = $$(".otp", step);
+  otps[0].focus();
+  otps.forEach((inp, i) => {
+    inp.addEventListener("input", () => { inp.value = inp.value.replace(/\D/g, ""); if (inp.value && otps[i + 1]) otps[i + 1].focus(); });
+    inp.addEventListener("keydown", (ev) => { if (ev.key === "Backspace" && !inp.value && otps[i - 1]) otps[i - 1].focus(); });
+    inp.addEventListener("paste", (ev) => {
+      const t = (ev.clipboardData.getData("text") || "").replace(/\D/g, "").slice(0, 4);
+      if (t.length === 4) { ev.preventDefault(); otps.forEach((o, k) => (o.value = t[k])); }
+    });
+  });
   $("#codeForm").addEventListener("submit", (ev) => {
     ev.preventDefault();
-    if (new FormData(ev.target).get("code") !== code) {
-      ev.target.insertAdjacentHTML("afterend", `<p class="fail-text">That code doesn't match.</p>`);
+    const entered = otps.map((o) => o.value).join("");
+    if (entered !== code) {
+      ev.target.classList.remove("shake");
+      void ev.target.offsetWidth;
+      ev.target.classList.add("shake");
+      toast("That code doesn't match", { tone: "danger", duration: 2500 });
       return;
     }
     store.setClaim(parcel.address || address, { name, masked, at: Date.now() });
+    toast("Home claimed", { description: "Now switch on Not for rent.", tone: "success" });
     owner();
   });
 }
@@ -413,68 +851,84 @@ function decide(alertId, approve) {
   if (!alert) return;
   store.updateAlert(alertId, { status: approve ? "approved" : "blocked" });
   const listing = store.listings().find((l) => l.id === alert.listingId);
-  if (listing) {
-    if (approve) store.saveListing({ ...listing, ownerApproved: true });
-    else store.saveListing({ ...listing, removed: true });
-  }
+  if (listing) store.saveListing(approve ? { ...listing, ownerApproved: true } : { ...listing, removed: true });
   resultCache.clear();
+  toast(approve ? "Listing approved" : "Listing blocked and reported", {
+    description: approve ? `${alert.listerName}'s listing is now live with an owner-approved label.` : `${alert.listerName} can't list your home again.`,
+    tone: approve ? "success" : "lock",
+  });
   owner();
 }
 
-// ---------- check any address (live county data) ----------
+// ---------- check any listing (live county data) ----------
 
 async function check() {
+  document.body.dataset.view = "page";
   app.innerHTML = `
-    <h1>Check a rental you found anywhere</h1>
-    <p class="muted">Paste the details from a Zillow, Craigslist or Facebook listing. We check them against live Travis County property records and HUD area rents.</p>
-    <form class="form" id="checkForm">
-      <label>Address<input name="address" required placeholder="1105 W Monroe St, Austin TX 78704"></label>
-      <div class="row">
-        <label>Lister's name<input name="listerName" required placeholder="Name shown on the listing"></label>
-        <label>Monthly rent<input name="rent" type="number" min="100" required></label>
-        <label>Bedrooms<input name="beds" type="number" min="0" max="8" required value="2"></label>
-      </div>
-      <label>Listing text or messages (optional)<textarea name="description" rows="3"></textarea></label>
-      <button class="btn primary">Check it</button>
-    </form>
-    <div id="checkResult"></div>`;
+    <div class="page check">
+      <header class="page-head">
+        <div class="eyebrow">${icon.search(14)} Live county records</div>
+        <h1>Check a rental you found anywhere</h1>
+        <p>Paste the details from a Zillow, Craigslist or Facebook listing. We check them against live Travis County property records and HUD area rents.</p>
+      </header>
+      <form class="card-surface check-form" id="checkForm">
+        <label class="field">Address<input name="address" required placeholder="1105 W Monroe St, Austin TX 78704"></label>
+        <div class="grid-3">
+          <label class="field">Lister's name<input name="listerName" required placeholder="Name on the listing"></label>
+          <label class="field">Monthly rent<span class="prefix-input"><i>$</i><input name="rent" type="number" min="100" required></span></label>
+          <label class="field">Bedrooms<input name="beds" type="number" min="0" max="8" required value="2"></label>
+        </div>
+        <label class="field">Listing text or messages <span class="muted">(optional)</span><textarea name="description" rows="3" placeholder="Paste what the lister wrote"></textarea></label>
+        <div class="form-foot"><span class="muted small">The photo check needs Zillow's archive of past listing photos, so it only runs on listings inside Zillow.</span><button class="btn btn-primary">Check it</button></div>
+      </form>
+      <div id="checkResult" class="lock-section"></div>
+    </div>`;
   $("#checkForm").addEventListener("submit", async (e) => {
     e.preventDefault();
     const f = new FormData(e.target);
     const address = f.get("address").trim();
     const zip = (address.match(/\b(\d{5})\b(?!.*\d{5})/) || [])[1] || "";
-    const listing = {
-      id: `check-${Date.now()}`, address, zip, listerName: f.get("listerName").trim(),
-      rent: Number(f.get("rent")), beds: Number(f.get("beds")), description: f.get("description") || "",
-      messages: [], photos: [],
-    };
-    $("#checkResult").innerHTML = `<div class="panel"><div class="spinner"></div><p>Looking up county records…</p></div>`;
+    const listing = { id: `check-${Date.now()}`, address, zip, listerName: f.get("listerName").trim(), rent: Number(f.get("rent")),
+      beds: Number(f.get("beds")), description: f.get("description") || "", messages: [], photos: [] };
+    const out = $("#checkResult");
+    out.innerHTML = skeletonBlock();
     const r = await evaluate(listing);
     if (!listing.zip && r.parcel?.zip) {
       listing.zip = r.parcel.zip;
       Object.assign(r, runChecks({ listing, parcel: r.parcel, lock: lockFor(address), photoMatches: [], lookupFailed: !!r.lookupError }));
+      r.score = trustScore(r);
     }
     r.checks = r.checks.filter((c) => c.id !== "photos");
-    $("#checkResult").innerHTML = panelHtml(r, listing) +
-      `<p class="muted small">The photo check needs Zillow's archive of past listing photos, so it only runs on listings inside the app.</p>`;
+    out.innerHTML = lockBlock(r, listing);
+    const host = $(".score", out);
+    fillRing(host, r.score / 100);
+    countUp(host.querySelector(".score-num"), r.score);
   });
 }
 
-// ---------- about ----------
+// ---------- how it works ----------
 
 function about() {
+  document.body.dataset.view = "page";
   app.innerHTML = $("#aboutTemplate").innerHTML;
+  $$("[data-icon]").forEach((el) => (el.innerHTML = icon[el.dataset.icon](22)));
+  const io = new IntersectionObserver((entries) => entries.forEach((en) => {
+    if (en.isIntersecting) { en.target.dataset.visible = ""; io.unobserve(en.target); }
+  }), { rootMargin: "0px 0px -80px 0px" });
+  $$(".reveal").forEach((el) => io.observe(el));
 }
 
 // ---------- boot ----------
 
 $("#resetDemo").addEventListener("click", (e) => {
   e.preventDefault();
-  if (!confirm("Clear claims, locks, alerts and posted listings?")) return;
   store.reset();
   resultCache.clear();
-  go("#/browse");
-  render();
+  sessionStorage.removeItem("hl.before");
+  toast("Demo reset", { description: "Claims, locks, alerts and posted listings were cleared." });
+  current = null;
+  if (location.hash === "#/rent") render();
+  else location.hash = "#/rent";
 });
 
 render();
