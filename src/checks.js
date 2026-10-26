@@ -206,11 +206,90 @@ export function checkLock(listing, lock) {
     detail: "The owner has locked this home as NOT for rent. The listing is held and the owner has been alerted." };
 }
 
+// ---------- relist fingerprints ----------
+// When a listing is removed for fraud, Home Lock keeps a fingerprint of it:
+// contact details, payment handles, wording and photos. Scammers relist with a
+// new name and one photo swapped, but they rarely change all of these at once.
+
+export function extractContacts(text) {
+  const out = new Set();
+  const t = String(text || "");
+  for (const m of t.matchAll(/(?:\+?1[\s.-]*)?\(?(\d{3})\)?[\s.-]*(\d{3})[\s.-]*(\d{4})\b/g)) out.add(`phone:${m[1]}${m[2]}${m[3]}`);
+  for (const m of t.matchAll(/[\w.+-]+@[\w-]+\.[\w.]+/g)) out.add(`email:${m[0].toLowerCase()}`);
+  for (const m of t.matchAll(/(?:^|\s)\$([A-Za-z][\w]{2,})/g)) out.add(`cashtag:${m[1].toLowerCase()}`);
+  return [...out];
+}
+
+const words = (t) => String(t || "").toLowerCase().replace(/[^a-z0-9\s]/g, " ").split(/\s+/).filter(Boolean);
+function shingles(text, n = 3) {
+  const w = words(text);
+  const set = new Set();
+  for (let i = 0; i + n <= w.length; i++) set.add(w.slice(i, i + n).join(" "));
+  return set;
+}
+
+// Share of three-word phrases the two texts have in common (Jaccard).
+export function textSimilarity(a, b) {
+  const A = shingles(a), B = shingles(b);
+  if (!A.size || !B.size) return 0;
+  let both = 0;
+  for (const x of A) if (B.has(x)) both++;
+  return both / (A.size + B.size - both);
+}
+
+export const listingText = (l) => [l.description, ...(l.messages || []), l.contact || ""].join(" ");
+
+export function fingerprint(listing, reason, now = Date.now()) {
+  return {
+    id: `fp-${listing.id}`, listingId: listing.id, address: listing.address, listerName: listing.listerName,
+    contacts: extractContacts(listingText(listing)), text: listingText(listing), photos: listing.photos || [],
+    reason, removedAt: now,
+  };
+}
+
+const CONTACT_LABEL = { phone: "phone number", email: "email address", cashtag: "Cash App handle" };
+
+// photoHits: { [fingerprintId]: number of this listing's photos matching that removed listing }
+export function checkRelist(listing, blocklist = [], photoHits = {}) {
+  const label = "Matches a listing removed for fraud";
+  const mine = new Set(extractContacts(listingText(listing)));
+  let best = null;
+  for (const fp of blocklist) {
+    if (fp.listingId === listing.id) continue;
+    const shared = fp.contacts.filter((c) => mine.has(c));
+    const sim = textSimilarity(listingText(listing), fp.text);
+    const photos = photoHits[fp.id] || 0;
+    const signals = [];
+    if (shared.length) signals.push(`the same ${shared.map((c) => CONTACT_LABEL[c.split(":")[0]]).join(" and ")}`);
+    if (photos) signals.push(`${photos} of the same photo${photos > 1 ? "s" : ""}`);
+    if (sim >= 0.35) signals.push(`${Math.round(sim * 100)}% of the same wording`);
+    if (signals.length && (!best || signals.length > best.signals.length)) best = { fp, signals, shared, sim, photos };
+  }
+  if (!best) return { id: "relist", label, status: "pass", detail: "No link to any listing removed for fraud." };
+  const when = new Date(best.fp.removedAt).toISOString().slice(0, 10);
+  const where = addressKey(best.fp.address) === addressKey(listing.address) ? "this home" : best.fp.address;
+  return { id: "relist", label, status: "fail", fingerprint: best.fp.id,
+    signals: { contacts: best.shared, similarity: best.sim, photos: best.photos },
+    detail: `It uses ${best.signals.join(", ")} as a listing of ${where} that was removed for fraud on ${when} (listed then as "${best.fp.listerName}").` };
+}
+
+// Decides at posting time whether a new listing goes live or waits.
+export function holdReason(checks, lock, listing) {
+  if (listing.ownerApproved) return null;
+  if (lock) return "lock";
+  const by = Object.fromEntries(checks.map((c) => [c.id, c.status]));
+  if (by.relist === "fail") return "relist";
+  // Someone other than the owner is renting out a home the owner appears to live in.
+  if (by.owner === "fail" && (by.occupancy === "fail" || by.occupancy === "warn")) return "notice";
+  return null;
+}
+
 // ---------- verdict ----------
 
-export function runChecks({ listing, parcel, lock, photoMatches, now, lookupFailed = false }) {
+export function runChecks({ listing, parcel, lock, photoMatches, now, lookupFailed = false, blocklist = [], relistPhotoHits = {} }) {
   const checks = [
     checkLock(listing, lock),
+    checkRelist(listing, blocklist, relistPhotoHits),
     checkOwnerMatch(listing, parcel, lookupFailed),
     checkOwnerLivesThere(listing, parcel),
     checkPhotoReuse(photoMatches),
@@ -221,11 +300,15 @@ export function runChecks({ listing, parcel, lock, photoMatches, now, lookupFail
   return { checks, verdict: verdict(checks, lock, listing) };
 }
 
+const HELD = {
+  lock: { title: "Held: the owner says this home is not for rent", advice: "Don't send money. The real owner has been notified." },
+  relist: { title: "Held: linked to a listing removed for fraud", advice: "Don't send money. This lister matches a scam that was already taken down." },
+  notice: { title: "Held: waiting for the owner of record", advice: "We mailed the owner. This listing goes live only if they confirm it." },
+};
+
 export function verdict(checks, lock, listing) {
-  if (lock && !listing.ownerApproved) {
-    return { level: "blocked", title: "Held: the owner says this home is not for rent",
-      advice: "Don't send money. The real owner has been notified." };
-  }
+  if (lock && !listing.ownerApproved) return { level: "blocked", reason: "lock", ...HELD.lock };
+  if (listing.hold && !listing.ownerApproved) return { level: "blocked", reason: listing.hold, ...HELD[listing.hold] };
   const fails = checks.filter((c) => c.status === "fail").length;
   const warns = checks.filter((c) => c.status === "warn").length;
   if (fails >= 2 || (fails === 1 && warns >= 2)) {

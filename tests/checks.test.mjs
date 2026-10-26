@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { addressKey, sameAddress, nameMatchScore, maskName, scanText, runChecks } from "../src/checks.js";
+import { addressKey, sameAddress, nameMatchScore, maskName, scanText, runChecks, extractContacts, textSimilarity, fingerprint, holdReason } from "../src/checks.js";
 import { fmrFor } from "../src/fmr.js";
 import { buildWhere, pickParcel } from "../src/county.js";
 import { DEMO_LISTINGS, DEMO_PARCELS } from "../src/fixtures.js";
@@ -55,7 +55,7 @@ test("scam demo listing is flagged as a likely scam", () => {
   const r = runChecks({ listing: l, parcel: parcelFor(l), lock: null, photoMatches: [{ score: 0.95, from: "sale listing" }], now });
   assert.equal(r.verdict.level, "danger");
   const status = Object.fromEntries(r.checks.map((c) => [c.id, c.status]));
-  assert.deepEqual(status, { lock: "info", owner: "fail", occupancy: "fail", photos: "fail", sale: "warn", price: "fail", language: "fail" });
+  assert.deepEqual(status, { lock: "info", relist: "pass", owner: "fail", occupancy: "fail", photos: "fail", sale: "warn", price: "fail", language: "fail" });
 });
 
 test("legit demo listing looks legitimate", () => {
@@ -78,4 +78,42 @@ test("missing county record is a warning, not a crash", () => {
   const l = listing("oak");
   const r = runChecks({ listing: l, parcel: null, lock: null, photoMatches: [], now });
   assert.equal(r.checks.find((c) => c.id === "owner").status, "warn");
+});
+
+test("contacts and payment handles are pulled out of listing text", () => {
+  assert.deepEqual(extractContacts("Text (512) 555-0147 or 512.555.0147, email Rent.Home@gmail.com, pay $homekeys not $1,200"),
+    ["phone:5125550147", "email:rent.home@gmail.com", "cashtag:homekeys"]);
+  assert.deepEqual(extractContacts("Open house Saturday at 2pm"), []);
+});
+
+test("a relist with a new name and swapped photo is linked to the removed scam", () => {
+  const removed = fingerprint(listing("maple"), "reported", now);
+  const relist = { ...listing("maple"), id: "relist-1", listerName: "Mike Bowen",
+    description: "Beautiful 3 bed home, freshly painted, pets welcome. I'm out of the country on a mission trip so I can't show it. Many people are interested, so send the deposit to hold it.",
+    messages: ["WhatsApp me at 512-555-0147, deposit by Zelle."] };
+  const r = runChecks({ listing: relist, parcel: parcelFor(relist), lock: null, photoMatches: [], now, blocklist: [removed], relistPhotoHits: { [removed.id]: 3 } });
+  const c = r.checks.find((x) => x.id === "relist");
+  assert.equal(c.status, "fail");
+  assert.deepEqual(c.signals.contacts, ["phone:5125550147"]);
+  assert.equal(c.signals.photos, 3);
+  assert.ok(c.signals.similarity > 0.2);
+  assert.equal(holdReason(r.checks, null, relist), "relist");
+  // An unrelated honest listing doesn't match.
+  const oak = runChecks({ listing: listing("oak"), parcel: parcelFor(listing("oak")), lock: null, photoMatches: [], now, blocklist: [removed] });
+  assert.equal(oak.checks.find((x) => x.id === "relist").status, "pass");
+  assert.ok(textSimilarity("the quick brown fox jumps", "the quick brown fox jumps") === 1);
+});
+
+test("a stranger renting out an owner-occupied home waits for the owner of record", () => {
+  const l = { ...listing("maple"), id: "new" };
+  const r = runChecks({ listing: l, parcel: parcelFor(l), lock: null, photoMatches: [], now });
+  assert.equal(holdReason(r.checks, null, l), "notice");
+  const held = runChecks({ listing: { ...l, hold: "notice" }, parcel: parcelFor(l), lock: null, photoMatches: [], now });
+  assert.equal(held.verdict.level, "blocked");
+  assert.equal(held.verdict.reason, "notice");
+  // The real owner listing their own home goes straight through.
+  const own = listing("oak");
+  assert.equal(holdReason(runChecks({ listing: own, parcel: parcelFor(own), lock: null, photoMatches: [], now }).checks, null, own), null);
+  // A lock takes priority.
+  assert.equal(holdReason(r.checks, { since: now }, l), "lock");
 });

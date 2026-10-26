@@ -19,6 +19,8 @@ Scammers copy a real home's photos from an old sale listing, post it "for rent" 
 | Every listing shows the same generic scam warning. | Each listing shows a verdict (*Owner verified*, *Caution*, *Likely scam*, *Held by owner's Home Lock*) with the evidence behind it. |
 | Anyone can list any address for rent. | Owners claim their home and switch on **Not for rent**. Rental listings of a locked home are held until the owner approves them, and the owner gets an alert. |
 | Renters must research ownership themselves. | The lister is checked against the county's owner of record automatically, and renters see only a masked name. |
+| Owners who never heard of the feature find out from a neighbor. | When a stranger lists a home its owner appears to live in, the listing is held and the owner of record gets a **letter at their tax mailing address**. Its code lets them claim the home and answer in one step. |
+| A reported fake comes back with a new name or one photo changed. | Removed scams leave a **fingerprint** (phone, email, Cash App handle, wording, photos). A relist that matches is held, even under a new name at a different address. |
 
 ![Austin rentals with Home Lock labels on the cards and map pins](docs/screenshots/rentals.png)
 
@@ -26,7 +28,11 @@ Scammers copy a real home's photos from an old sale listing, post it "for rent" 
 
 ![Copied photos, with a drag-to-compare slider against the home's earlier sale listing](docs/screenshots/photo-evidence.png)
 
-![The owner's alert when someone lists their locked home](docs/screenshots/owner-alert.png)
+![The letter mailed to an owner who never signed up](docs/screenshots/letter.png)
+
+![A relist under a new name at a different house, linked to the removed scam](docs/screenshots/relist.png)
+
+![The owner's alert when someone lists their home](docs/screenshots/owner-alert.png)
 
 <img src="docs/screenshots/mobile.png" width="300" alt="The listing detail on a phone">
 
@@ -41,6 +47,9 @@ Scammers copy a real home's photos from an old sale listing, post it "for rent" 
 | Price vs. area rent | [HUD FY2027 Small Area Fair Market Rents](https://www.huduser.gov/portal/datasets/fmr/smallarea/index.html) by ZIP and bedroom count | "Too good to be true" pricing is the bait. Zillow would use its Rent Zestimate. |
 | Scam language | Listing text and messages | Wire, Zelle or gift cards; "out of the country"; "keys will be mailed"; moving to WhatsApp; deposit before a showing. |
 | Home Lock | Owner's lock and approvals | Locked homes can't be listed without the owner. |
+| Links to removed scams | Fingerprints of listings removed for fraud: contact details and payment handles, three-word phrase overlap, and photo matches | Scammers relist with a new name, a new address or one photo swapped, but rarely change everything at once. |
+
+**What happens to a new listing.** A listing waits instead of going live when the owner locked the home, when it links to a removed scam, or when someone other than the owner of record lists a home the owner appears to live in. In that last case Home Lock mails the owner of record. If they don't answer within 7 days, the lister can only publish after verifying their ID and uploading a lease or management agreement signed by the owner.
 
 ## Try it
 
@@ -55,10 +64,13 @@ Node 18 or newer. `npm test` runs the unit tests.
 
 **Demo walkthrough**
 
-1. **Rent** (`#/rent`): a Zillow-style map and list of six Austin rentals. Each card and map pin carries a Home Lock label, and verified homes sort first. Open *2104 Maple Bend Dr* to see a likely scam. The lister isn't the owner, the owner lives there, the photos match the home's 2025 sale listing (drag the slider to compare), the rent is 54% below HUD's rate, and the scam phrases are highlighted. Switch on *Show today's Zillow* to see what renters get now.
-2. **For Owners** (`#/home-lock`): claim *905 Cedar Ridge Cv* as **Anjali Patel**. Try another name first; it's rejected because it doesn't match county records. Enter the mailed code, then switch on **Not for rent**.
-3. **Manage Rentals** (`#/rental-manager`): list *905 Cedar Ridge Cv* as anyone else. The listing is held, and the owner sees an alert with *approve* or *block and report*.
-4. **Check a listing** (`#/check`): type a real Austin address (for example, one from a Craigslist ad). Owner, occupancy and sale data come live from Travis County.
+1. **Rent** (`#/rent`): a Zillow-style map and list of six Austin rentals. Each card and map pin carries a Home Lock label, and verified homes sort first. Open *2104 Maple Bend Dr* to see a likely scam. The lister isn't the owner, the owner lives there, the photos match the home's 2025 sale listing (drag the slider to compare), the rent is 54% below HUD's rate, and the scam phrases are highlighted. Switch on *Show today's Zillow* to see what renters get now. *Report this listing* removes it and saves its fingerprint.
+2. **Manage Rentals** (`#/rental-manager`), preset *Scammer*: list *905 Cedar Ridge Cv* as Michael Brown. Its owner has never used Home Lock, but county records say she lives there, so the listing is held and she's mailed a letter. Click *See the letter we mailed*.
+3. **For Owners** (`#/home-lock`): under *Got a letter from Home Lock?* enter the letter's code and **Anjali Patel** (any other name is rejected). The home is claimed and the held listing appears. Click *Not me, block and report*, then switch on **Not for rent**.
+4. **Manage Rentals**, preset *Same scammer, new name*: James Carter lists a different house with the same phone number and similar wording. It's linked to the removed listing and held. Preset *Real owner* publishes normally.
+5. **Check a listing** (`#/check`): type a real Austin address (for example, one from a Craigslist ad). Owner, occupancy and sale data come live from Travis County.
+
+The original claim flow (find your home, match your name, enter a mailed code) still works for owners who want to lock their home before anything happens.
 
 *Reset demo* in the top bar clears the saved claims, locks and alerts.
 
@@ -71,11 +83,11 @@ index.html, styles.css    Page shell, Zillow-style layout, motion and responsive
 src/app.js                Routes and views: rentals, listing detail, rental manager, owner dashboard, live check
 src/ui.js                 Icons, toasts, animated score ring and numbers, photo comparison slider
 src/map.js                Results map: Leaflet with price pins, plus a drawn Austin map used offline
-src/checks.js             All checks and the verdict (pure functions, unit tested)
+src/checks.js             All checks, relist fingerprints, hold rules and the verdict (pure functions, unit tested)
 src/county.js             Travis County parcel lookup: direct, then via server.mjs proxy
 src/phash.js              Photo matching: normalized thumbnails + cross-correlation over crop windows
 src/fmr.js                HUD FY2027 Small Area Fair Market Rents for Austin ZIPs
-src/store.js              Demo persistence (localStorage) for claims, locks, alerts, listings
+src/store.js              Demo persistence (localStorage) for claims, locks, alerts, listings, fingerprints, letters
 server.mjs                Zero-dependency static server and county API proxy
 tools/make_demo_photos.py Generates the synthetic photos and their disguised copies
 tests/                    node:test unit tests
@@ -103,7 +115,9 @@ HTML, CSS and JavaScript (ES modules, no framework or build step), Node.js (buil
 - Name matching can't tell when an owner uses a property manager. That's why the owner can approve a manager.
 - Owners who mail tax bills elsewhere still pass the occupancy check.
 - Photo matching was tuned on the synthetic demo photos. Disguised copies score 93 to 96%. Different homes mostly score lower, but two similar synthetic rooms can reach about 94%, so the app only compares a listing with past photos of the same address.
-- The code-by-mail step is simulated in the demo.
+- The code-by-mail step and the letter to the owner of record are simulated in the demo. In production they'd go out through a print-and-mail service.
+- Fingerprints are only as good as the reports behind them. A scammer who changes phone, wording and every photo isn't linked, though the other checks still apply.
+- Legitimate property managers still get *Caution* until the owner approves them. Checking the state's real estate license list would fix that.
 
 ## License
 

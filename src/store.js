@@ -44,8 +44,21 @@ export const store = {
   setClaim(address, claim) {
     write("hl.claims", { ...store.claims(), [address]: claim });
   },
+  // Fingerprints of listings removed for fraud, used to catch relists.
+  blocklist: () => read("hl.blocklist", []),
+  addFingerprint(fp) {
+    write("hl.blocklist", [fp, ...store.blocklist().filter((x) => x.id !== fp.id)]);
+  },
+  // Letters mailed to owners of record who haven't joined Home Lock.
+  notices: () => read("hl.notices", []),
+  addNotice(notice) {
+    write("hl.notices", [notice, ...store.notices()]);
+  },
+  updateNotice(id, patch) {
+    write("hl.notices", store.notices().map((n) => (n.id === id ? { ...n, ...patch } : n)));
+  },
   reset() {
-    for (const k of ["hl.locks", "hl.alerts", "hl.listings", "hl.claims"]) {
+    for (const k of ["hl.locks", "hl.alerts", "hl.listings", "hl.claims", "hl.blocklist", "hl.notices"]) {
       delete memory[k];
       try { localStorage.removeItem(k); } catch { /* ignore */ }
     }
