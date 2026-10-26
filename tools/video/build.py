@@ -1,7 +1,7 @@
 # Assemble the final video: crossfaded scenes, narration, music bed, captions.
 import json, re, subprocess, soundfile as sf
 
-ORDER = ["intro", "news", "before", "search", "scam", "photos", "legit", "owner", "scammer", "alert", "ship", "outro"]
+ORDER = ["intro", "news", "before", "search", "scam", "photos", "legit", "scammer", "letter", "owner", "relist", "ship", "outro"]
 LEAD = 0.6
 XF = 0.4
 narr = dict(json.load(open("narration.json")))

@@ -1,14 +1,54 @@
 [
- ["intro", "Imagine finding your own home listed for rent on Zillow, by someone who doesn't own it. Scammers copy the photos from an old sale listing, price it far below market, and ask for a deposit by Zelle, before anyone sees the house."],
- ["news", "A family in Highlands Ranch, Colorado reported their hijacked listing. It came back with one photo changed. Renters lose their deposits. Owners find out from a neighbor."],
- ["before", "Here's what renters see today. Every listing carries the same generic scam warning, real or fake. And nothing stops anyone from listing a home they don't own."],
- ["search", "Meet Home Lock, the feature Zillow is missing. Every rental gets a verdict, on the card and on the map. Verified owners rise to the top, and likely scams are flagged in red."],
- ["scam", "Take this three bedroom, for just twelve hundred dollars a month. Home Lock scores it four out of a hundred. The lister isn't the owner in county records, and renters only ever see a masked name. The owner's tax mail goes to this very house, so they live here. Yet the lister claims to be out of the country."],
- ["photos", "All four photos match this home's twenty twenty-five sale listing, even after cropping, recoloring, and a stamped caption. Drag to compare. The rent is fifty-four percent below the H-U-D fair market rent, and the scam phrases are highlighted right in the description."],
- ["legit", "A real owner's listing looks different. The name matches county records, the price is normal, and there are no red flags. Ninety-eight out of a hundred."],
- ["owner", "Now, the owner's side. A stranger can't claim this home, because the name has to match the county's owner of record. Anjali can. A code is mailed to the property, and then, one switch. Not for rent."],
- ["scammer", "So a scammer tries to list her house, using the old sale photos. Home Lock holds it, before a single renter ever sees it."],
- ["alert", "And Anjali gets an alert. If it's her property manager, she approves it in one tap. If not, one tap blocks and reports the lister."],
- ["ship", "It runs on public data. Every U.S. county publishes its owner records, and Home Lock already checks Travis County live. Zillow has home claiming, a photo archive, and the Rent Zest-imate. So Zillow can ship this."],
- ["outro", "Home Lock. Your home, rented only by you."]
+ [
+  "intro",
+  "Imagine finding your own home listed for rent on Zillow, by someone who doesn't own it. Scammers copy the photos from an old sale listing, price it far below market, and ask for a deposit by Zelle, before anyone sees the house."
+ ],
+ [
+  "news",
+  "A family in Highlands Ranch, Colorado reported their hijacked listing. It came back with one photo changed. Renters lose their deposits. Owners find out from a neighbor."
+ ],
+ [
+  "before",
+  "Here's what renters see today. Every listing carries the same generic scam warning, real or fake. And nothing stops anyone from listing a home they don't own."
+ ],
+ [
+  "search",
+  "Meet Home Lock, the feature Zillow is missing. Every rental gets a verdict, on the card and on the map. Verified owners rise to the top, and likely scams are flagged in red."
+ ],
+ [
+  "scam",
+  "Take this three bedroom, for just twelve hundred dollars a month. Home Lock scores it four out of a hundred. The lister isn't the owner in county records, and renters only ever see a masked name. The owner's tax mail goes to this very house, so they live here. Yet the lister claims to be out of the country."
+ ],
+ [
+  "photos",
+  "All four photos match this home's twenty twenty-five sale listing, even after cropping, recoloring, and a stamped caption. Drag to compare. The rent is fifty-four percent below the H-U-D fair market rent, and the scam phrases are highlighted right in the description."
+ ],
+ [
+  "legit",
+  "A real owner's listing looks different. The name matches county records, the price is normal, and there are no red flags. Ninety-eight out of a hundred."
+ ],
+ [
+  "scammer",
+  "Now the scammer's side. He lists this home with its old sale photos. The owner has never heard of Home Lock, but county records say she lives here. So the listing is held."
+ ],
+ [
+  "letter",
+  "Most owners will never sign up. So Home Lock mails the owner of record a letter, at the address on her tax bill, with a code."
+ ],
+ [
+  "owner",
+  "Anjali enters the code, and her name, which has to match county records. She sees the held listing, blocks it, and switches on: not for rent."
+ ],
+ [
+  "relist",
+  "Scammers come back with a new name. This one even moves to a different house. But it's the same phone number and the same wording, so Home Lock links it to the scam it already removed, and holds it."
+ ],
+ [
+  "ship",
+  "It runs on public data. Every U.S. county publishes its owner records, and Home Lock already checks Travis County live. Zillow has home claiming, a photo archive, and the Rent Zest-imate. So Zillow can ship this."
+ ],
+ [
+  "outro",
+  "Home Lock. Your home, rented only by you."
+ ]
 ]

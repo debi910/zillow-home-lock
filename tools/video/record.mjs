@@ -223,49 +223,60 @@ await scene("legit", async () => {
 });
 
 await pg.keyboard.press("Escape"); await wait(300);
-await pg.goto(BASE + "#/home-lock"); await pg.waitForSelector("#claimForm"); await wait(700);
-await scrollTo("window", ".owner-grid", 70, 10);
-await pg.mouse.move(...mouse);
-
-await scene("owner", async () => {
-  await chapter("OWNER VIEW", "#5a2ca0");
-  await pg.fill("#claimForm [name=address]", "905 Cedar Ridge Cv, Austin TX 78702");
-  await at(0.2); await click("#claimForm [name=name]", { ms: 600 }); await type("#claimForm [name=name]", "Michael Brown", 40);
-  await click("#claimForm button", { ms: 500 });
-  await pg.waitForSelector(".claim-msg.bad");
-  await at(6.0); await click("#claimForm [name=name]", { ms: 500 }); await type("#claimForm [name=name]", "Anjali Patel", 40);
-  await click("#claimForm button", { ms: 450 });
-  await pg.waitForSelector(".otp");
-  await at(8.6);
-  const code = await pg.$eval(".code", (e) => e.textContent.trim());
-  await click(".otp", { ms: 400 }); await pg.keyboard.type(code, { delay: 110 });
-  await click("#codeForm button", { ms: 450 });
-  await pg.waitForSelector(".switch.big");
-  await at(11.4); await click(".switch.big", { ms: 600 });
-});
-
 await pg.goto(BASE + "#/rental-manager"); await pg.waitForSelector("#postForm"); await wait(700);
-await pg.fill("[name=address]", "905 Cedar Ridge Cv, Austin TX 78702"); await pg.fill("[name=listerName]", "Michael Brown");
 await pg.mouse.move(...mouse);
 
 await scene("scammer", async () => {
   await chapter("SCAMMER VIEW", "#d1263b");
-  await at(0.0); await scrollTo("window", ".photo-choices", 200, 1000);
+  await at(0.2); await moveTo("#postForm [name=listerName]", { ms: 700 });
+  await at(1.8); await scrollTo("window", ".photo-choices", 200, 1000);
   await moveTo(".photo-choice", { dy: 0.4, ms: 600 });
-  await at(2.6); await click("#postForm button[type=submit]", { ms: 600 });
+  await at(4.2); await click("#postForm button[type=submit]", { ms: 600 });
   await pg.waitForSelector(".result", { timeout: 20000 });
-  await scrollTo("window", ".result", 200, 800);
+  await scrollTo("window", ".result", 160, 800);
+  await moveTo(".result h2", { ms: 600 });
 });
 
-await pg.goto(BASE + "#/home-lock"); await pg.waitForSelector(".alert"); await wait(600);
+await scene("letter", async () => {
+  await chapter("OWNER, BY MAIL", "#5a2ca0");
+  await at(0.0); await click(".result a", { ms: 500 });
+  await pg.waitForSelector(".paper"); await wait(500);
+  await at(2.2); await scrollTo("window", ".paper-to", 120, 1400);
+  await moveTo(".paper-to", { dx: 0.15, ms: 700 });
+  await at(5.4); await moveTo(".paper-code b", { ms: 700 });
+});
+
+const letterCode = await pg.evaluate(() => JSON.parse(localStorage.getItem("hl.notices"))?.[0]?.code || "");
+await pg.goto(BASE + "#/home-lock"); await pg.waitForSelector("#letterForm"); await wait(600);
+await scrollTo("window", ".claim", 40, 10);
 await pg.mouse.move(...mouse);
 
-await scene("alert", async () => {
+await scene("owner", async () => {
   await chapter("OWNER VIEW", "#5a2ca0");
-  await at(0.0); await scrollTo("window", ".alert", 300, 900);
-  await moveTo(".alert", { dx: 0.3, dy: 0.3, ms: 600 });
-  await at(2.6); await moveTo("[data-approve]", { ms: 700 });
-  await at(5.4); await click("[data-deny]", { ms: 700 });
+  await at(0.0); await click("#letterForm [name=code]", { ms: 600 }); await pg.keyboard.type(letterCode, { delay: 70 });
+  await click("#letterForm [name=name]", { ms: 400 }); await pg.keyboard.type("Anjali Patel", { delay: 40 });
+  await click("#letterForm button", { ms: 400 });
+  await pg.waitForSelector(".home-card [data-deny]");
+  await moveTo(".home-card .alert", { dx: 0.3, dy: 0.3, ms: 500 });
+  await at(5.6); await click("[data-deny]", { ms: 600 });
+  await pg.waitForSelector(".alert.blocked"); await wait(300);
+  await at(7.4); await click(".switch.big", { ms: 500 });
+});
+
+await pg.goto(BASE + "#/rental-manager"); await pg.waitForSelector("#postForm"); await wait(700);
+await pg.mouse.move(...mouse);
+
+await scene("relist", async () => {
+  await chapter("SAME SCAMMER, NEW NAME", "#d1263b");
+  await at(0.2); await click("[data-preset=relist]", { ms: 700 });
+  await moveTo("#postForm [name=listerName]", { ms: 600 });
+  await at(2.6); await moveTo("#postForm [name=address]", { dx: 0.3, ms: 600 });
+  await at(4.4); await scrollTo("window", ".form-foot", 360, 900);
+  await click("#postForm button[type=submit]", { ms: 600 });
+  await pg.waitForSelector(".result", { timeout: 20000 });
+  await scrollTo("window", ".result", 160, 800);
+  await moveTo(".result .ev-chip", { ms: 600 });
+  await at(10.0); await moveTo(".result .ev-chip:nth-child(2)", { ms: 600 });
 });
 
 await pg.goto(BASE + "#/how-it-works"); await wait(900);
