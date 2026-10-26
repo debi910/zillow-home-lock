@@ -1,0 +1,227 @@
+1
+00:00:00,600 --> 00:00:04,080
+Imagine finding your own home listed for rent on Zillow,
+
+2
+00:00:04,130 --> 00:00:06,130
+by someone who doesn't own it.
+
+3
+00:00:06,180 --> 00:00:09,660
+Scammers copy the photos from an old sale listing, price
+
+4
+00:00:09,710 --> 00:00:12,960
+it far below market, and ask for a deposit by Zelle,
+
+5
+00:00:13,010 --> 00:00:14,950
+before anyone sees the house.
+
+6
+00:00:15,900 --> 00:00:19,140
+A family in Highlands Ranch, Colorado reported their
+
+7
+00:00:19,190 --> 00:00:20,450
+hijacked listing.
+
+8
+00:00:20,500 --> 00:00:22,830
+It came back with one photo changed.
+
+9
+00:00:22,880 --> 00:00:24,760
+Renters lose their deposits.
+
+10
+00:00:24,810 --> 00:00:26,920
+Owners find out from a neighbor.
+
+11
+00:00:27,870 --> 00:00:29,810
+Here's what renters see today.
+
+12
+00:00:29,860 --> 00:00:33,300
+Every listing carries the same generic scam warning, real
+
+13
+00:00:33,350 --> 00:00:34,080
+or fake.
+
+14
+00:00:34,130 --> 00:00:37,460
+And nothing stops anyone from listing a home they don't
+
+15
+00:00:37,510 --> 00:00:38,010
+own.
+
+16
+00:00:38,970 --> 00:00:41,900
+Meet Home Lock, the feature Zillow is missing.
+
+17
+00:00:41,950 --> 00:00:45,450
+Every rental gets a verdict, on the card and on the map.
+
+18
+00:00:45,500 --> 00:00:48,830
+Verified owners rise to the top, and likely scams are
+
+19
+00:00:48,880 --> 00:00:50,030
+flagged in red.
+
+20
+00:00:50,970 --> 00:00:54,290
+Take this three bedroom, for just twelve hundred dollars a
+
+21
+00:00:54,340 --> 00:00:54,920
+month.
+
+22
+00:00:54,970 --> 00:00:57,440
+Home Lock scores it four out of a hundred.
+
+23
+00:00:57,490 --> 00:01:00,760
+The lister isn't the owner in county records, and renters
+
+24
+00:01:00,810 --> 00:01:02,550
+only ever see a masked name.
+
+25
+00:01:02,600 --> 00:01:05,920
+The owner's tax mail goes to this very house, so they live
+
+26
+00:01:05,970 --> 00:01:06,500
+here.
+
+27
+00:01:06,550 --> 00:01:09,280
+Yet the lister claims to be out of the country.
+
+28
+00:01:10,230 --> 00:01:13,720
+All four photos match this home's twenty twenty-five sale
+
+29
+00:01:13,770 --> 00:01:17,150
+listing, even after cropping, recoloring, and a stamped
+
+30
+00:01:17,200 --> 00:01:17,940
+caption.
+
+31
+00:01:17,990 --> 00:01:19,180
+Drag to compare.
+
+32
+00:01:19,230 --> 00:01:22,660
+The rent is fifty-four percent below the HUD fair market
+
+33
+00:01:22,710 --> 00:01:26,090
+rent, and the scam phrases are highlighted right in the
+
+34
+00:01:26,140 --> 00:01:27,100
+description.
+
+35
+00:01:28,070 --> 00:01:30,430
+A real owner's listing looks different.
+
+36
+00:01:30,480 --> 00:01:33,810
+The name matches county records, the price is normal, and
+
+37
+00:01:33,860 --> 00:01:35,370
+there are no red flags.
+
+38
+00:01:35,420 --> 00:01:37,300
+Ninety-eight out of a hundred.
+
+39
+00:01:38,230 --> 00:01:39,760
+Now, the owner's side.
+
+40
+00:01:39,810 --> 00:01:43,320
+A stranger can't claim this home, because the name has to
+
+41
+00:01:43,370 --> 00:01:45,640
+match the county's owner of record.
+
+42
+00:01:45,690 --> 00:01:46,600
+Anjali can.
+
+43
+00:01:46,650 --> 00:01:50,040
+A code is mailed to the property, and then, one switch.
+
+44
+00:01:50,090 --> 00:01:51,110
+Not for rent.
+
+45
+00:01:52,070 --> 00:01:55,460
+So a scammer tries to list her house, using the old sale
+
+46
+00:01:55,510 --> 00:01:56,190
+photos.
+
+47
+00:01:56,240 --> 00:01:59,630
+Home Lock holds it, before a single renter ever sees it.
+
+48
+00:02:00,570 --> 00:02:02,290
+And Anjali gets an alert.
+
+49
+00:02:02,340 --> 00:02:05,900
+If it's her property manager, she approves it in one tap.
+
+50
+00:02:05,950 --> 00:02:08,880
+If not, one tap blocks and reports the lister.
+
+51
+00:02:09,830 --> 00:02:11,430
+It runs on public data.
+
+52
+00:02:11,480 --> 00:02:12,330
+Every U.S.
+
+53
+00:02:12,380 --> 00:02:15,900
+county publishes its owner records, and Home Lock already
+
+54
+00:02:15,950 --> 00:02:17,720
+checks Travis County live.
+
+55
+00:02:17,770 --> 00:02:21,170
+Zillow has home claiming, a photo archive, and the Rent
+
+56
+00:02:21,220 --> 00:02:22,080
+Zestimate.
+
+57
+00:02:22,130 --> 00:02:23,780
+So Zillow can ship this.

@@ -13,3 +13,7 @@ Before recording: run `npm start`, open http://localhost:8080, click **Reset dem
 | 2:30 to 2:45 | **Check a listing**: a real Austin address | "It runs on live public data. Here's a real Austin address checked against Travis County records in real time. Zillow already has home claiming, a photo archive and rent estimates, so it can ship this." |
 
 Tip: if the live lookup is slow on camera, record that segment separately and cut it in.
+
+## Rendered video
+
+A finished narrated cut (2:31, 1080p) is produced by `tools/video/`: `tts.py` voices `narration.json` with the open Kokoro TTS model, `record.mjs` drives the app in headless Chrome and records each scene to match its line, `frame.py` draws the browser frame, `music.py` synthesizes the background bed, and `build.py` adds crossfades, captions and the audio mix. Captions for uploading are in `docs/home-lock-demo.srt`. The voice and music are generated, so there are no licensing issues.

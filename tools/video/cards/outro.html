@@ -1,0 +1,18 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="base.css"><style>
+body { background: #0b1220; color: #fff; }
+.c { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; }
+.logo { width: 150px; height: 150px; margin: 0 auto 28px; }
+.shackle { transform: translateY(-14px); animation: drop 520ms var(--ease) forwards; animation-delay: .9s; }
+@keyframes drop { to { transform: none; } }
+h1 { font-size: 92px; font-weight: 800; letter-spacing: -2px; }
+p { font-size: 36px; color: #c9d4e6; margin-top: 10px; }
+.meta { position: absolute; bottom: 64px; left: 0; right: 0; text-align: center; font-size: 20px; color: #8796ad; line-height: 1.7; }
+.meta b { color: #fff; font-weight: 600; }
+</style></head><body>
+<div class="c"><div>
+  <svg class="logo pop" viewBox="0 0 32 32"><path d="M16 3 3 13.5V29h26V13.5Z" fill="#006AFF"/><rect x="11" y="16" width="10" height="8" rx="1.6" fill="#fff"/><path class="shackle" d="M13 16v-2.4a3 3 0 0 1 6 0V16" stroke="#fff" stroke-width="2" fill="none"/></svg>
+  <h1 class="in" style="animation-delay:.3s">Home Lock</h1>
+  <p class="in" style="animation-delay:1.3s">Your home, rented only by you.</p>
+</div></div>
+<div class="meta in" style="animation-delay:2.4s"><b>github.com/debi910/zillow-home-lock</b><br>Concept for Zillow Rentals · Hack to the Future 2026 · not affiliated with Zillow<br>Public data: Travis Central Appraisal District · HUD Small Area Fair Market Rents</div>
+</body></html>

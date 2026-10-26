@@ -1,0 +1,24 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="base.css"><style>
+.wrap { position: absolute; inset: 0; padding: 140px 120px 0; display: grid; gap: 28px; align-content: start; }
+.eyebrow { font-weight: 800; letter-spacing: 3px; font-size: 18px; color: var(--blue); }
+.news { background: #fff; border: 1px solid #e3e8ef; border-radius: 22px; padding: 30px 36px; box-shadow: 0 20px 50px -24px rgba(16,24,40,.3); max-width: 1180px; }
+.news .src { font-size: 18px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 1.5px; }
+.news h2 { font-size: 40px; line-height: 1.2; font-weight: 800; margin-top: 8px; letter-spacing: -0.5px; }
+.news.b { margin-left: 120px; }
+.hl { background: linear-gradient(transparent 58%, #ffd9de 58%); background-size: 0% 100%; background-repeat: no-repeat; animation: hl 900ms var(--ease) forwards; animation-delay: 4.6s; }
+@keyframes hl { to { background-size: 100% 100%; } }
+.note { font-size: 24px; color: var(--bad); font-weight: 700; margin-top: 12px; }
+.row { display: flex; gap: 22px; margin-top: 8px; }
+.chip { display: flex; align-items: center; gap: 14px; font-size: 26px; font-weight: 700; background: #1a1d24; color: #fff; border-radius: 999px; padding: 16px 28px; }
+.chip svg { color: #ff8a98; }
+</style></head><body>
+<div class="brand"><svg width="30" height="30" viewBox="0 0 32 32"><path d="M16 3 3 13.5V29h26V13.5Z" fill="#006AFF"/><rect x="11" y="16" width="10" height="8" rx="1.6" fill="#fff"/><path d="M13 16v-2.4a3 3 0 0 1 6 0V16" stroke="#fff" stroke-width="2" fill="none"/></svg>Home Lock <small>for Zillow Rentals</small></div>
+<div class="wrap">
+  <div class="eyebrow in" style="animation-delay:.1s">THIS IS REAL</div>
+  <div class="news in" style="animation-delay:.3s"><div class="src">Denver7 News</div><h2><span class="hl">Highlands Ranch family's home put up for rent without their permission on Zillow</span></h2><div class="note in" style="animation-delay:3.4s">Reported, then relisted with one photo changed.</div></div>
+  <div class="news b in" style="animation-delay:1.6s"><div class="src">ABC11 News</div><h2>Zillow "dream home" turns out to be Durham scam</h2></div>
+  <div class="row">
+    <div class="chip pop" style="animation-delay:6.6s"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg>Renters lose their deposits</div>
+    <div class="chip pop" style="animation-delay:8.4s"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M3 10.5 12 3l9 7.5M5 9.5V21h14V9.5"/></svg>Owners hear it from a neighbor</div>
+  </div>
+</div></body></html>

@@ -1,0 +1,14 @@
+@import url("https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700;800&display=swap");
+:root { --blue: #006aff; --ink: #1a1d24; --muted: #596b82; --bad: #d1263b; --held: #5a2ca0; --ease: cubic-bezier(0.23, 1, 0.32, 1); }
+* { box-sizing: border-box; margin: 0; }
+html { zoom: 0.8; }
+html, body { width: 1600px; height: 900px; overflow: hidden; }
+body { font-family: "Open Sans", system-ui, sans-serif; color: var(--ink); background: radial-gradient(1200px 700px at 80% 10%, #e8f1ff 0%, #f7f9fc 55%, #fff 100%); }
+.in { opacity: 0; transform: translateY(18px); animation: in 700ms var(--ease) forwards; }
+.pop { opacity: 0; transform: scale(0.94); animation: pop 600ms var(--ease) forwards; }
+.out { animation: out 500ms var(--ease) forwards; }
+@keyframes in { to { opacity: 1; transform: none; } }
+@keyframes pop { to { opacity: 1; transform: none; } }
+@keyframes out { to { opacity: 0; transform: translateY(-14px); } }
+.brand { position: absolute; top: 40px; left: 56px; display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 24px; color: var(--blue); }
+.brand small { color: var(--muted); font-weight: 600; font-size: 15px; }
