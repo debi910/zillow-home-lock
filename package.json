@@ -1,0 +1,13 @@
+{
+  "name": "zillow-home-lock",
+  "version": "1.0.0",
+  "description": "Home Lock: a concept feature for Zillow Rentals that stops scammers from listing homes they don't own.",
+  "type": "module",
+  "private": true,
+  "license": "MIT",
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node --test tests/*.test.mjs"
+  },
+  "engines": { "node": ">=18" }
+}
